@@ -32,7 +32,7 @@ This project enables fully autonomous agricultural-style drone missions includin
                            ▼
                 ┌──────────────────────┐
                 │      ESP32 Bridge    │
-                │  WiFi AP + UDP Relay │
+                │  WiFi AP + GPIO4 Relay+ Pump │
                 └─────────┬────────────┘
                           │ UART MAVLink
                           ▼
@@ -40,16 +40,7 @@ This project enables fully autonomous agricultural-style drone missions includin
                 │      Pixhawk         │
                 │ Flight Controller    │
                 └─────────┬────────────┘
-                          │ GPIO Control
-                          ▼
-                ┌──────────────────────┐
-                │   Relay Module       │
-                └─────────┬────────────┘
-                          ▼
-                ┌──────────────────────┐
-                │ Pump / Payload       │
-                └──────────────────────┘
-```
+
 
 ---
 
