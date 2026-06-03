@@ -1,15 +1,25 @@
 from mavsdk import System
 from mavsdk.telemetry import LandedState
 import asyncio
+import socket
+
+# ==================================================
+# CONFIG
+# ==================================================
 
 TAKEOFF_ALTITUDE = 5.0
-LOITER_TIME = 30  # seconds
+
+LOITER_TIME = 60      # total hover time
+SPRAY_TIME = 20       # relay ON duration
+
+ESP32_IP = "192.168.4.1"
+UDP_PORT = 14550
 
 
 async def run():
 
     print("===================================")
-    print("SIMPLE LOITER MISSION")
+    print("LOITER + SPRAY MISSION")
     print("===================================")
 
     # ==================================================
@@ -22,6 +32,8 @@ async def run():
 
     await drone.connect(system_address="udpin://0.0.0.0:14550")
 
+    print("Waiting for connection...")
+
     async for state in drone.core.connection_state():
 
         if state.is_connected:
@@ -29,7 +41,7 @@ async def run():
             break
 
     # ==================================================
-    # WAIT FOR GPS LOCK
+    # GPS LOCK
     # ==================================================
 
     print("Waiting for GPS lock...")
@@ -51,30 +63,46 @@ async def run():
     print("Drone armed!")
 
     # ==================================================
-    # SET TAKEOFF ALTITUDE
+    # TAKEOFF
     # ==================================================
 
     await drone.action.set_takeoff_altitude(TAKEOFF_ALTITUDE)
 
-    # ==================================================
-    # TAKEOFF
-    # ==================================================
-
-    print(f"Taking off to {TAKEOFF_ALTITUDE} meters...")
+    print(f"Taking off to {TAKEOFF_ALTITUDE} m...")
 
     await drone.action.takeoff()
 
-    # wait for stabilization
-    await asyncio.sleep(8)
+    # allow climb and stabilization
+    await asyncio.sleep(10)
 
     # ==================================================
-    # LOITER
+    # UDP SOCKET
     # ==================================================
 
-    print(f"Loitering for {LOITER_TIME} seconds...")
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    # Drone will automatically hold position
-    await asyncio.sleep(LOITER_TIME)
+    # ==================================================
+    # LOITER + SPRAY
+    # ==================================================
+
+    print("Beginning loiter...")
+
+    mission_start = asyncio.get_event_loop().time()
+
+    print("Relay ON")
+    sock.sendto(b"RELAY_ON", (ESP32_IP, UDP_PORT))
+
+    await asyncio.sleep(SPRAY_TIME)
+
+    print("Relay OFF")
+    sock.sendto(b"RELAY_OFF", (ESP32_IP, UDP_PORT))
+
+    elapsed = asyncio.get_event_loop().time() - mission_start
+    remaining = max(0, LOITER_TIME - elapsed)
+
+    print(f"Continuing loiter for {remaining:.1f} seconds")
+
+    await asyncio.sleep(remaining)
 
     # ==================================================
     # RTL
@@ -85,7 +113,7 @@ async def run():
     await drone.action.return_to_launch()
 
     # ==================================================
-    # WAIT UNTIL LANDED
+    # WAIT FOR LANDING
     # ==================================================
 
     print("Waiting for landing...")
@@ -99,8 +127,6 @@ async def run():
     # ==================================================
     # DISARM
     # ==================================================
-
-    print("Disarming drone...")
 
     try:
         await drone.action.disarm()

@@ -53,7 +53,7 @@ async def run():
     sock.sendto(b"RELAY_ON", (ESP32_IP, UDP_PORT))
 
     # KEEP RELAY ON FOR 5 SECONDS
-    await asyncio.sleep(20)
+    await asyncio.sleep(30)
 
     # ==================================================
     # RELAY OFF
