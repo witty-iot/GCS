@@ -19,15 +19,22 @@ ESP32_PORT = 14550
 TIMEOUT    = 3
 
 # ─── Mission Definition ───────────────────────────────────────────────────────
+# Requested flow:
+# 1) Takeoff to 2.5 m
+# 2) Switch to LOITER and hold position
+# 3) Wait up to 15 s for relay activation (if relay doesn't turn on yet)
+# 4) Once relay is ON, keep it ON for 5 s
+# 5) Turn relay OFF
+# 6) Land (no RTL)
 MISSION = {
     "steps": [
-        { "action": "takeoff", "alt": 5 },
-        { "action": "wait",    "seconds": 20 },
+        { "action": "takeoff", "alt": 2.5 },
+        { "action": "set_mode", "mode": "LOITER" },
+        { "action": "wait", "seconds": 1 },
         { "action": "relay_on" },
-        { "action": "wait",    "seconds": 20 },
+        { "action": "wait", "seconds": 5 },
         { "action": "relay_off" },
-        { "action": "wait",    "seconds": 20 },
-        { "action": "rtl" }
+        { "action": "land" }
     ]
 }
 
@@ -60,9 +67,9 @@ def send_start():
     print("[2/3] Sending START...")
     send_udp("START")
     print("      Mission started on ESP32")
-    print("      Waiting for mission to complete (~150s)...")
+    print("      Waiting for mission to complete (~60s)...")
     print("      Watch ESP32 serial monitor for step logs.\n")
-    time.sleep(150)  # Wait for takeoff + relay cycle + RTL + buffer
+    time.sleep(60)  # Wait for takeoff + loiter + relay pulse + land + buffer
 
 def send_stop():
     print("Sending STOP (RTL will be commanded on the drone)...")
