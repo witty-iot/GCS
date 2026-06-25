@@ -28,12 +28,13 @@ TIMEOUT    = 3
 # 6) Land (no RTL)
 MISSION = {
     "steps": [
-        { "action": "takeoff", "alt": 2.5 },
         { "action": "set_mode", "mode": "LOITER" },
+        { "action": "takeoff", "alt": 2.5 },
         { "action": "wait", "seconds": 1 },
         { "action": "relay_on" },
-        { "action": "wait", "seconds": 5 },
+        { "action": "wait", "seconds": 10 },
         { "action": "relay_off" },
+        { "action": "set_mode", "mode": "LAND" },
         { "action": "land" }
     ]
 }
