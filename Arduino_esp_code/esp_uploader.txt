@@ -307,7 +307,7 @@ void executeMission() {
       return;
     }
     if (stepStartTime == 0) {
-      sendSetMode(4);
+      sendSetMode(5);
       delay(300);
       cmdArm(true);
       stepStartTime = millis();
@@ -316,7 +316,7 @@ void executeMission() {
     }
     if (millis() - lastWpSendTime >= 3000) {
       Serial.println("[Step] Re-sending ARM...");
-      sendSetMode(4);
+      sendSetMode(5);
       delay(100);
       cmdArm(true);
       lastWpSendTime = millis();
@@ -350,7 +350,7 @@ void executeMission() {
   } else if (action == "takeoff") {
     float alt = step["alt"].as<float>();
     if (stepStartTime == 0) {
-      sendSetMode(4);
+      sendSetMode(5);
       delay(300);
       cmdArm(true);
       delay(500);
