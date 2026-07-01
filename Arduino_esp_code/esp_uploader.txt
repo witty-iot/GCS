@@ -310,6 +310,35 @@ void sendCommandLong(uint16_t cmd,
   Serial.printf("[TX] COMMAND_LONG cmd=%u\n", cmd);
 }
 
+void sendCommandInt(uint16_t cmd, uint8_t frame,
+                    float p1, float p2, float p3, float p4,
+                    int32_t x, int32_t y, float z) {
+  const uint8_t PLEN = 35;
+  uint8_t pkt[6 + PLEN + 2];
+  pkt[0] = 0xFE; pkt[1] = PLEN;
+  pkt[2] = tx_seq++; pkt[3] = MY_SYS_ID; pkt[4] = MY_COMP_ID;
+  pkt[5] = 75;
+  memcpy(&pkt[6],  &p1, 4);
+  memcpy(&pkt[10], &p2, 4);
+  memcpy(&pkt[14], &p3, 4);
+  memcpy(&pkt[18], &p4, 4);
+  memcpy(&pkt[22], &x, 4);
+  memcpy(&pkt[26], &y, 4);
+  memcpy(&pkt[30], &z, 4);
+  pkt[34] = cmd & 0xFF; pkt[35] = (cmd >> 8) & 0xFF;
+  pkt[36] = DRONE_SYS_ID;
+  pkt[37] = DRONE_COMP_ID;
+  pkt[38] = frame;
+  pkt[39] = 0;
+  pkt[40] = 0;
+  uint16_t crc = 0xFFFF;
+  for (int i = 1; i < 6 + PLEN; i++) crc = crc_acc(pkt[i], crc);
+  crc = crc_acc(158, crc);
+  pkt[41] = crc & 0xFF; pkt[42] = (crc >> 8) & 0xFF;
+  Serial2.write(pkt, 43);
+  Serial.printf("[TX] COMMAND_INT cmd=%u frame=%u\n", cmd, frame);
+}
+
 void sendSetMode(uint32_t custom_mode) {
   const uint8_t PLEN = 6;
   uint8_t pkt[6 + PLEN + 2];
@@ -365,8 +394,120 @@ void cmdTakeoff(float alt_m) {
   sendCommandLong(22, 0,0,0,0,0,0, alt_m);
 }
 
-void cmdWaypoint(float lat, float lon, float alt) {
-  sendCommandLong(16, 0, WP_RADIUS_M, 0, 0, lat, lon, alt);
+void cmdReposition(float lat, float lon, float alt) {
+  int32_t lat_int = (int32_t)(lat * 1e7f);
+  int32_t lon_int = (int32_t)(lon * 1e7f);
+  sendCommandInt(192, 6, -1.0f, 0, WP_RADIUS_M, NAN, lat_int, lon_int, alt);
+}
+
+void cmdGuidedPosition(float lat, float lon, float alt) {
+  const uint8_t PLEN = 53;
+  uint8_t pkt[6 + PLEN + 2];
+  pkt[0] = 0xFE; pkt[1] = PLEN;
+  pkt[2] = tx_seq++; pkt[3] = MY_SYS_ID; pkt[4] = MY_COMP_ID;
+  pkt[5] = 86;
+
+  uint32_t time_boot_ms = millis();
+  int32_t lat_int = (int32_t)(lat * 1e7f);
+  int32_t lon_int = (int32_t)(lon * 1e7f);
+  float zero = 0.0f;
+  uint16_t type_mask = 3576;
+
+  memcpy(&pkt[6],  &time_boot_ms, 4);
+  memcpy(&pkt[10], &lat_int, 4);
+  memcpy(&pkt[14], &lon_int, 4);
+  memcpy(&pkt[18], &alt, 4);
+  memcpy(&pkt[22], &zero, 4);
+  memcpy(&pkt[26], &zero, 4);
+  memcpy(&pkt[30], &zero, 4);
+  memcpy(&pkt[34], &zero, 4);
+  memcpy(&pkt[38], &zero, 4);
+  memcpy(&pkt[42], &zero, 4);
+  memcpy(&pkt[46], &zero, 4);
+  memcpy(&pkt[50], &zero, 4);
+  memcpy(&pkt[54], &type_mask, 2);
+  pkt[56] = DRONE_SYS_ID;
+  pkt[57] = DRONE_COMP_ID;
+  pkt[58] = 6;
+
+  uint16_t crc = 0xFFFF;
+  for (int i = 1; i < 6 + PLEN; i++) crc = crc_acc(pkt[i], crc);
+  crc = crc_acc(5, crc);
+  pkt[59] = crc & 0xFF; pkt[60] = (crc >> 8) & 0xFF;
+  Serial2.write(pkt, 61);
+  Serial.printf("[TX] SET_POSITION_TARGET_GLOBAL_INT lat=%.6f lon=%.6f alt=%.1f\n", lat, lon, alt);
+}
+
+void cmdLocalPositionTarget(float x, float y, float z) {
+  const uint8_t PLEN = 53;
+  uint8_t pkt[6 + PLEN + 2];
+  pkt[0] = 0xFE; pkt[1] = PLEN;
+  pkt[2] = tx_seq++; pkt[3] = MY_SYS_ID; pkt[4] = MY_COMP_ID;
+  pkt[5] = 84;
+
+  uint32_t time_boot_ms = millis();
+  float zero = 0.0f;
+  uint16_t type_mask = 3576;
+
+  memcpy(&pkt[6],  &time_boot_ms, 4);
+  memcpy(&pkt[10], &x, 4);
+  memcpy(&pkt[14], &y, 4);
+  memcpy(&pkt[18], &z, 4);
+  memcpy(&pkt[22], &zero, 4);
+  memcpy(&pkt[26], &zero, 4);
+  memcpy(&pkt[30], &zero, 4);
+  memcpy(&pkt[34], &zero, 4);
+  memcpy(&pkt[38], &zero, 4);
+  memcpy(&pkt[42], &zero, 4);
+  memcpy(&pkt[46], &zero, 4);
+  memcpy(&pkt[50], &zero, 4);
+  memcpy(&pkt[54], &type_mask, 2);
+  pkt[56] = DRONE_SYS_ID;
+  pkt[57] = DRONE_COMP_ID;
+  pkt[58] = 1;
+
+  uint16_t crc = 0xFFFF;
+  for (int i = 1; i < 6 + PLEN; i++) crc = crc_acc(pkt[i], crc);
+  crc = crc_acc(143, crc);
+  pkt[59] = crc & 0xFF; pkt[60] = (crc >> 8) & 0xFF;
+  Serial2.write(pkt, 61);
+  Serial.printf("[TX] SET_POSITION_TARGET_LOCAL_NED pos x=%.1f y=%.1f z=%.1f\n", x, y, z);
+}
+
+void cmdLocalVelocityTarget(float vx, float vy, float vz) {
+  const uint8_t PLEN = 53;
+  uint8_t pkt[6 + PLEN + 2];
+  pkt[0] = 0xFE; pkt[1] = PLEN;
+  pkt[2] = tx_seq++; pkt[3] = MY_SYS_ID; pkt[4] = MY_COMP_ID;
+  pkt[5] = 84;
+
+  uint32_t time_boot_ms = millis();
+  float zero = 0.0f;
+  uint16_t type_mask = 3527;
+
+  memcpy(&pkt[6],  &time_boot_ms, 4);
+  memcpy(&pkt[10], &zero, 4);
+  memcpy(&pkt[14], &zero, 4);
+  memcpy(&pkt[18], &zero, 4);
+  memcpy(&pkt[22], &vx, 4);
+  memcpy(&pkt[26], &vy, 4);
+  memcpy(&pkt[30], &vz, 4);
+  memcpy(&pkt[34], &zero, 4);
+  memcpy(&pkt[38], &zero, 4);
+  memcpy(&pkt[42], &zero, 4);
+  memcpy(&pkt[46], &zero, 4);
+  memcpy(&pkt[50], &zero, 4);
+  memcpy(&pkt[54], &type_mask, 2);
+  pkt[56] = DRONE_SYS_ID;
+  pkt[57] = DRONE_COMP_ID;
+  pkt[58] = 1;
+
+  uint16_t crc = 0xFFFF;
+  for (int i = 1; i < 6 + PLEN; i++) crc = crc_acc(pkt[i], crc);
+  crc = crc_acc(143, crc);
+  pkt[59] = crc & 0xFF; pkt[60] = (crc >> 8) & 0xFF;
+  Serial2.write(pkt, 61);
+  Serial.printf("[TX] SET_POSITION_TARGET_LOCAL_NED vel vx=%.1f vy=%.1f vz=%.1f\n", vx, vy, vz);
 }
 
 void cmdRTL() {
@@ -473,7 +614,7 @@ void executeMission() {
       return;
     }
     if (stepStartTime == 0) {
-      sendSetMode(5);
+      sendSetMode(4);
       delay(300);
       cmdArm(true);
       stepStartTime = millis();
@@ -482,7 +623,7 @@ void executeMission() {
     }
     if (millis() - lastWpSendTime >= 3000) {
       Serial.println("[Step] Re-sending ARM...");
-      sendSetMode(5);
+      sendSetMode(4);
       delay(100);
       cmdArm(true);
       lastWpSendTime = millis();
@@ -518,17 +659,100 @@ void executeMission() {
       sendSetMode(4);
       delay(300);
       cmdArm(true);
-      delay(500);
-      cmdTakeoff(alt);
       stepStartTime = millis();
-      Serial.printf("[Step] takeoff to %.1fm\n", alt);
+      lastWpSendTime = 0;
+      Serial.printf("[Step] preparing takeoff to %.1fm\n", alt);
+    }
+    if (!drone_armed) {
+      if (millis() - lastWpSendTime >= 3000) {
+        cmdArm(true);
+        lastWpSendTime = millis();
+      }
+      if (millis() - stepStartTime > 30000UL) abortMission("takeoff arm timeout");
+      return;
+    }
+    if (lastWpSendTime == 0) {
+      cmdTakeoff(alt);
+      stepStartTime = lastWpSendTime = millis();
+      Serial.printf("[Step] takeoff command sent to %.1fm\n", alt);
     }
     if (telemetryFresh() && fabsf(current_alt - alt) <= 1.0f) {
       Serial.println("[Step] takeoff altitude reached");
-      stepStartTime = 0;
+      stepStartTime = lastWpSendTime = 0;
       currentStep++;
     } else if (millis() - stepStartTime > 20000UL) {
       abortMission("takeoff timeout");
+    }
+
+  } else if (action == "reposition") {
+    float tlat = step["lat"].as<float>();
+    float tlon = step["lon"].as<float>();
+    float talt = step["alt"].as<float>();
+    if (!telemetryFresh()) {
+      if (stepStartTime == 0) stepStartTime = millis();
+      if (millis() - stepStartTime > GPS_LOCK_TIMEOUT) abortMission("no fresh GPS/heartbeat telemetry");
+      Serial.println("[Step] waiting for fresh GPS/heartbeat telemetry...");
+      delay(500);
+      return;
+    }
+    if (stepStartTime == 0) {
+      sendSetMode(4);
+      delay(100);
+      cmdReposition(tlat, tlon, talt);
+      stepStartTime = lastWpSendTime = millis();
+      Serial.printf("[Step] reposition lat=%.6f lon=%.6f alt=%.1f\n", tlat, tlon, talt);
+    }
+    if (millis() - lastWpSendTime >= WP_SEND_INTERVAL) {
+      cmdReposition(tlat, tlon, talt);
+      lastWpSendTime = millis();
+    }
+    if (millis() - stepStartTime > WP_TIMEOUT_MS) { abortMission("reposition timeout"); return; }
+    float dist    = haversine(current_lat, current_lon, tlat, tlon);
+    float alt_err = fabsf(current_alt - talt);
+    Serial.printf("[Reposition] dist=%.1fm alt_err=%.1fm\n", dist, alt_err);
+    if (dist <= WP_RADIUS_M && alt_err <= WP_ALT_ERR_M) {
+      Serial.println("[Step] reposition target REACHED");
+      stepStartTime = lastWpSendTime = 0;
+      currentStep++;
+    }
+
+  } else if (action == "local_ned") {
+    float x = step["x"].as<float>();
+    float y = step["y"].as<float>();
+    float z = step["z"].as<float>();
+    uint32_t hold_ms = (uint32_t)(step["seconds"] | 8) * 1000UL;
+    if (stepStartTime == 0) {
+      sendSetMode(4);
+      delay(100);
+      cmdLocalPositionTarget(x, y, z);
+      stepStartTime = lastWpSendTime = millis();
+      Serial.printf("[Step] local_ned x=%.1f y=%.1f z=%.1f hold=%us\n", x, y, z, hold_ms / 1000);
+    }
+    if (millis() - lastWpSendTime >= WP_SEND_INTERVAL) {
+      cmdLocalPositionTarget(x, y, z);
+      lastWpSendTime = millis();
+    }
+    if (millis() - stepStartTime >= hold_ms) {
+      stepStartTime = lastWpSendTime = 0;
+      currentStep++;
+    }
+
+  } else if (action == "brake_hover") {
+    uint32_t hold_ms = (uint32_t)(step["seconds"] | 5) * 1000UL;
+    if (stepStartTime == 0) {
+      sendSetMode(4);
+      delay(100);
+      cmdLocalVelocityTarget(0, 0, 0);
+      stepStartTime = lastWpSendTime = millis();
+      Serial.printf("[Step] brake_hover zero velocity for %us\n", hold_ms / 1000);
+    }
+    if (millis() - lastWpSendTime >= 500UL) {
+      cmdLocalVelocityTarget(0, 0, 0);
+      lastWpSendTime = millis();
+    }
+    if (millis() - stepStartTime >= hold_ms) {
+      stepStartTime = lastWpSendTime = 0;
+      currentStep++;
     }
 
   } else if (action == "fly_to") {
@@ -543,12 +767,14 @@ void executeMission() {
       return;
     }
     if (stepStartTime == 0) {
-      cmdWaypoint(tlat, tlon, talt);
+      sendSetMode(4);
+      delay(100);
+      cmdGuidedPosition(tlat, tlon, talt);
       stepStartTime = lastWpSendTime = millis();
       Serial.printf("[Step] fly_to lat=%.6f lon=%.6f alt=%.1f\n", tlat, tlon, talt);
     }
     if (millis() - lastWpSendTime >= WP_SEND_INTERVAL) {
-      cmdWaypoint(tlat, tlon, talt);
+      cmdGuidedPosition(tlat, tlon, talt);
       lastWpSendTime = millis();
     }
     if (millis() - stepStartTime > WP_TIMEOUT_MS) { abortMission("waypoint timeout"); return; }
