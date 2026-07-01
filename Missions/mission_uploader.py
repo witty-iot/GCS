@@ -3,8 +3,8 @@ ESP32 Drone Mission Uploader
 Usage:
     python mission_uploader.py              # upload mission, confirm before start
     python mission_uploader.py --start      # upload + immediately start
-    python mission_uploader.py --stop       # send STOP / RTL command
-    python mission_uploader.py --status     # request status print on ESP32 serial
+    python mission_uploader.py --stop       # send STOP / LAND command
+    python mission_uploader.py --status     # print ESP32/Pixhawk status in this terminal
 """
 
 import socket
@@ -15,24 +15,27 @@ import sys
 
 # ─── ESP32 Connection Settings ───────────────────────────────────────────────
 ESP32_IP   = "192.168.4.1"
-ESP32_PORT = 14550
+ESP32_PORT = 14551
 TIMEOUT    = 3
+STATUS_INTERVAL = 1.0
+PRESTART_TIMEOUT = 20
+MISSION_TIMEOUT = 120
+FRESH_TELEMETRY_MS = 5000
 
 # ─── Mission Definition ───────────────────────────────────────────────────────
 # Requested flow:
-# 1) Takeoff to 2.5 m
-# 2) Switch to LOITER and hold position
-# 3) Wait up to 15 s for relay activation (if relay doesn't turn on yet)
-# 4) Once relay is ON, keep it ON for 5 s
-# 5) Turn relay OFF
-# 6) Land (no RTL)
+# 1) Switch to GUIDED and takeoff to 2.5 m
+# 2) Turn relay ON as soon as takeoff is confirmed
+# 3) Switch to LOITER and hold position
+# 4) Keep relay ON briefly, then turn it OFF
+# 5) Land (no RTL)
 MISSION = {
     "steps": [
-        { "action": "set_mode", "mode": "LOITER" },
+        { "action": "set_mode", "mode": "GUIDED" },
         { "action": "takeoff", "alt": 2.5 },
-        { "action": "wait", "seconds": 1 },
         { "action": "relay_on" },
-        { "action": "wait", "seconds": 10 },
+        { "action": "set_mode", "mode": "LOITER" },
+        { "action": "wait", "seconds": 5 },
         { "action": "relay_off" },
         { "action": "set_mode", "mode": "LAND" },
         { "action": "land" }
@@ -40,18 +43,135 @@ MISSION = {
 }
 
 # ─── UDP Helpers ─────────────────────────────────────────────────────────────
-def send_udp(message):
+def send_udp(message, expect_reply=False, timeout=TIMEOUT, quiet=False):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(TIMEOUT)
+    sock.settimeout(timeout)
     try:
         payload = message.encode("utf-8")
         sock.sendto(payload, (ESP32_IP, ESP32_PORT))
-        print(f"  -> Sent ({len(payload)} bytes)")
+        if not quiet:
+            print(f"  -> Sent ({len(payload)} bytes)")
+        if expect_reply:
+            data, _ = sock.recvfrom(2048)
+            return data.decode("utf-8", errors="replace").strip()
     except Exception as e:
+        if expect_reply:
+            return None
         print(f"  X Send failed: {e}")
         sys.exit(1)
     finally:
         sock.close()
+    return None
+
+def parse_status(reply):
+    if not reply:
+        return None
+    try:
+        status = json.loads(reply)
+    except json.JSONDecodeError:
+        return None
+    return status if status.get("type") == "status" else None
+
+def request_status(timeout=TIMEOUT):
+    return parse_status(send_udp("STATUS", expect_reply=True, timeout=timeout, quiet=True))
+
+def step_label(status):
+    step = status.get("step", 0)
+    total = status.get("total_steps", 0)
+    action = status.get("action") or "idle"
+    if total:
+        return f"{step + 1}/{total} {action}" if step < total else f"{total}/{total} complete"
+    return "no mission"
+
+def format_status(status):
+    gps_age = status.get("gps_age_ms")
+    hb_age = status.get("heartbeat_age_ms")
+    gps_age_text = "n/a" if gps_age is None or gps_age > 60000 else f"{gps_age / 1000:.1f}s"
+    hb_age_text = "n/a" if hb_age is None or hb_age > 60000 else f"{hb_age / 1000:.1f}s"
+    return (
+        f"step={step_label(status)}  running={'YES' if status.get('running') else 'NO'}  "
+        f"armed={'YES' if status.get('armed') else 'NO'}  "
+        f"gps={'OK' if status.get('gps') else 'NO'} age={gps_age_text}  hb_age={hb_age_text}  "
+        f"alt={status.get('alt', 0):.1f}m  lat={status.get('lat', 0):.6f} "
+        f"lon={status.get('lon', 0):.6f}  mode={status.get('mode', 0)}  "
+        f"completed={'YES' if status.get('completed') else 'NO'} aborted={'YES' if status.get('aborted') else 'NO'}"
+    )
+
+def print_status(status, prefix="STATUS"):
+    print(f"[{prefix}] {format_status(status)}")
+    if status.get("last_abort"):
+        print(f"         last_abort={status['last_abort']}")
+
+def telemetry_is_fresh(status):
+    return (
+        status.get("gps")
+        and status.get("gps_age_ms", 999999) <= FRESH_TELEMETRY_MS
+        and status.get("heartbeat_age_ms", 999999) <= FRESH_TELEMETRY_MS
+    )
+
+def require_prestart_ready():
+    print("[Preflight] Waiting for ESP/Pixhawk telemetry and GPS lock...")
+    deadline = time.time() + PRESTART_TIMEOUT
+    last_status = None
+    while time.time() < deadline:
+        status = request_status(timeout=1.5)
+        if status:
+            last_status = status
+            print_status(status, "Preflight")
+            if not status.get("mission_stored"):
+                print("[ERROR] ESP32 does not report a stored mission.")
+                sys.exit(1)
+            if status.get("running"):
+                print("[ERROR] ESP32 says a mission is already running.")
+                sys.exit(1)
+            if telemetry_is_fresh(status):
+                print("[Preflight] Fresh Pixhawk heartbeat and GPS telemetry are live.")
+                print("[Preflight] Pixhawk arming checks remain enabled and will decide whether ARM is accepted.")
+                return
+        else:
+            print("[Preflight] No UDP status reply from ESP32 yet...")
+        time.sleep(STATUS_INTERVAL)
+
+    print("\n[ERROR] Preflight did not become ready.")
+    if last_status:
+        print_status(last_status, "Last")
+    else:
+        print("        No STATUS reply received. Flash the updated ESP firmware, check WiFi, IP, and UDP port.")
+    sys.exit(1)
+
+def monitor_mission():
+    print("[3/3] Monitoring mission telemetry. Press Ctrl+C to send STOP/LAND.")
+    deadline = time.time() + MISSION_TIMEOUT
+    arm_confirmed = False
+    try:
+        while time.time() < deadline:
+            status = request_status(timeout=1.5)
+            if not status:
+                print("[Monitor] No STATUS reply from ESP32")
+                time.sleep(STATUS_INTERVAL)
+                continue
+
+            print_status(status, "Monitor")
+            if status.get("armed") and not arm_confirmed:
+                arm_confirmed = True
+                print("[Monitor] Pixhawk accepted ARM. Arming checks passed at arm time.")
+            if status.get("aborted"):
+                print("\n[ERROR] Mission aborted by ESP32/Pixhawk path.")
+                sys.exit(1)
+            if status.get("completed"):
+                print("\nMission complete.")
+                return
+            if not status.get("running") and status.get("step", 0) > 0:
+                print("\n[WARN] Mission is no longer running, but completion was not reported.")
+                return
+            time.sleep(STATUS_INTERVAL)
+    except KeyboardInterrupt:
+        print("\nCtrl+C received. Sending STOP/LAND...")
+        send_stop()
+        sys.exit(130)
+
+    print("\n[ERROR] Mission monitor timed out.")
+    sys.exit(1)
 
 def send_mission():
     data = json.dumps(MISSION, separators=(",", ":"))
@@ -61,25 +181,38 @@ def send_mission():
         extra_str = "  " + "  ".join(f"{k}={v}" for k, v in extras.items()) if extras else ""
         print(f"       {i+1}. {step['action']}{extra_str}")
     print()
-    send_udp(data)
+    reply = send_udp(data, expect_reply=True)
+    if reply != "OK MISSION_STORED":
+        print("[ERROR] ESP32 did not confirm mission storage.")
+        print(f"        Reply: {reply or 'no UDP reply'}")
+        sys.exit(1)
+    print("  <- ESP32 confirmed mission storage")
     time.sleep(0.3)
 
 def send_start():
     print("[2/3] Sending START...")
-    send_udp("START")
+    reply = send_udp("START", expect_reply=True)
+    if reply != "OK START":
+        print("[ERROR] ESP32 refused START.")
+        print(f"        Reply: {reply or 'no UDP reply'}")
+        sys.exit(1)
     print("      Mission started on ESP32")
-    print("      Waiting for mission to complete (~60s)...")
-    print("      Watch ESP32 serial monitor for step logs.\n")
-    time.sleep(60)  # Wait for takeoff + loiter + relay pulse + land + buffer
+    print("      Terminal telemetry monitor is active.\n")
 
 def send_stop():
-    print("Sending STOP (RTL will be commanded on the drone)...")
-    send_udp("STOP")
+    print("Sending STOP (LAND will be commanded on the drone)...")
+    reply = send_udp("STOP", expect_reply=True)
+    if reply:
+        print(f"ESP32 reply: {reply}")
     print("STOP sent\n")
 
 def send_status():
-    print("Sending STATUS (check ESP32 serial monitor for output)...")
-    send_udp("STATUS")
+    print("Requesting STATUS from ESP32...")
+    status = request_status()
+    if not status:
+        print("[ERROR] No UDP STATUS reply. Flash the updated ESP firmware or check WiFi/IP/port.")
+        sys.exit(1)
+    print_status(status)
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 def main():
@@ -87,10 +220,10 @@ def main():
 
     parser = argparse.ArgumentParser(description="ESP32 Drone Mission Uploader")
     parser.add_argument("--start",  action="store_true", help="Upload and immediately start mission")
-    parser.add_argument("--stop",   action="store_true", help="Send STOP command (triggers RTL)")
+    parser.add_argument("--stop",   action="store_true", help="Send STOP command (triggers LAND)")
     parser.add_argument("--status", action="store_true", help="Request status from ESP32")
     parser.add_argument("--ip",     default=ESP32_IP,    help="ESP32 IP (default: 192.168.4.1)")
-    parser.add_argument("--port",   default=ESP32_PORT,  type=int, help="UDP port (default: 14550)")
+    parser.add_argument("--port",   default=ESP32_PORT,  type=int, help="Mission UDP port (default: 14551)")
     args = parser.parse_args()
 
     ESP32_IP   = args.ip
@@ -110,6 +243,7 @@ def main():
         return
 
     send_mission()
+    require_prestart_ready()
 
     if args.start:
         send_start()
@@ -122,8 +256,7 @@ def main():
             print("  To start later run:  python mission_uploader.py --start\n")
             return
 
-    print("[3/3] Done.")
-    print("  Mission execution complete.")
+    monitor_mission()
     print("  To abort at any time run:  python mission_uploader.py --stop\n")
 
 if __name__ == "__main__":
