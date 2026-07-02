@@ -1,12 +1,12 @@
 """
-ESP32 local-NED position target test.
+ESP32 local-NED offset position target test.
 
 Flow:
   arm -> takeoff -> SET_POSITION_TARGET_LOCAL_NED position -> land
 
-Local NED uses X=north, Y=east, Z=down, relative to ArduPilot's EKF
-origin. So Z=-2.5 means 2.5 m above that local origin. Keep X/Y tiny
-for the first test.
+The ESP32 sends MAV_FRAME_LOCAL_OFFSET_NED, so X/Y/Z are relative to the
+drone's position when this step is commanded. X=5 means 5 m north from
+the current position; Z=-2.5 means 2.5 m above the current position.
 """
 
 import argparse
@@ -78,12 +78,20 @@ def request_status(timeout=TIMEOUT):
 
 
 def print_status(status, prefix="STATUS"):
+    gps_fix = status.get("gps_fix_type", 0)
+    sats = status.get("gps_satellites", 0)
+    ekf = status.get("ekf_flags", 0)
+    ack_cmd = status.get("last_ack_command", 0)
+    ack_result = status.get("last_ack_result", 255)
+    landed = status.get("landed_state", 0)
     print(
         f"[{prefix}] step={status.get('step', 0) + 1}/{status.get('total_steps', 0)} "
         f"{status.get('action') or 'idle'} running={'YES' if status.get('running') else 'NO'} "
         f"armed={'YES' if status.get('armed') else 'NO'} gps={'OK' if status.get('gps') else 'NO'} "
+        f"fix={gps_fix} sats={sats} ekf=0x{ekf:04X} landed={landed} "
         f"alt={status.get('alt', 0):.1f}m lat={status.get('lat', 0):.6f} "
         f"lon={status.get('lon', 0):.6f} mode={status.get('mode', 0)} "
+        f"ack={ack_cmd}/{ack_result} "
         f"completed={'YES' if status.get('completed') else 'NO'} aborted={'YES' if status.get('aborted') else 'NO'}"
     )
     if status.get("last_abort"):
@@ -93,7 +101,9 @@ def print_status(status, prefix="STATUS"):
 def telemetry_is_fresh(status):
     return (
         status.get("gps")
+        and status.get("gps_fix_type", 0) >= 3
         and status.get("gps_age_ms", 999999) <= FRESH_TELEMETRY_MS
+        and status.get("gps_raw_age_ms", 999999) <= FRESH_TELEMETRY_MS
         and status.get("heartbeat_age_ms", 999999) <= FRESH_TELEMETRY_MS
     )
 
@@ -186,8 +196,8 @@ def main():
         return
 
     print("=" * 58)
-    print("  ESP32 Local-NED Position Target Test")
-    print(f"  X north={LOCAL_X_NORTH_M}m  Y east={LOCAL_Y_EAST_M}m  Z down={LOCAL_Z_DOWN_M}m")
+    print("  ESP32 Local-NED Offset Position Target Test")
+    print(f"  Offset X north={LOCAL_X_NORTH_M}m  Y east={LOCAL_Y_EAST_M}m  Z down={LOCAL_Z_DOWN_M}m")
     print("=" * 58)
     upload_start_monitor(args.start)
 
