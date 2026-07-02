@@ -2,7 +2,7 @@
 ESP32 zero-velocity brake hover test.
 
 Flow:
-  arm -> takeoff -> small local-NED move -> repeated zero-velocity targets -> land
+  arm -> takeoff -> small local-NED offset move -> repeated zero-velocity targets -> land
 """
 
 import argparse
@@ -76,12 +76,20 @@ def request_status(timeout=TIMEOUT):
 
 
 def print_status(status, prefix="STATUS"):
+    gps_fix = status.get("gps_fix_type", 0)
+    sats = status.get("gps_satellites", 0)
+    ekf = status.get("ekf_flags", 0)
+    ack_cmd = status.get("last_ack_command", 0)
+    ack_result = status.get("last_ack_result", 255)
+    landed = status.get("landed_state", 0)
     print(
         f"[{prefix}] step={status.get('step', 0) + 1}/{status.get('total_steps', 0)} "
         f"{status.get('action') or 'idle'} running={'YES' if status.get('running') else 'NO'} "
         f"armed={'YES' if status.get('armed') else 'NO'} gps={'OK' if status.get('gps') else 'NO'} "
+        f"fix={gps_fix} sats={sats} ekf=0x{ekf:04X} landed={landed} "
         f"alt={status.get('alt', 0):.1f}m lat={status.get('lat', 0):.6f} "
         f"lon={status.get('lon', 0):.6f} mode={status.get('mode', 0)} "
+        f"ack={ack_cmd}/{ack_result} "
         f"completed={'YES' if status.get('completed') else 'NO'} aborted={'YES' if status.get('aborted') else 'NO'}"
     )
     if status.get("last_abort"):
@@ -91,7 +99,9 @@ def print_status(status, prefix="STATUS"):
 def telemetry_is_fresh(status):
     return (
         status.get("gps")
+        and status.get("gps_fix_type", 0) >= 3
         and status.get("gps_age_ms", 999999) <= FRESH_TELEMETRY_MS
+        and status.get("gps_raw_age_ms", 999999) <= FRESH_TELEMETRY_MS
         and status.get("heartbeat_age_ms", 999999) <= FRESH_TELEMETRY_MS
     )
 
@@ -185,7 +195,7 @@ def main():
 
     print("=" * 58)
     print("  ESP32 Zero-Velocity Brake Hover Test")
-    print(f"  Move X north={MOVE_X_NORTH_M}m, then brake for {BRAKE_SECONDS}s")
+    print(f"  Offset move X north={MOVE_X_NORTH_M}m, then brake for {BRAKE_SECONDS}s")
     print("=" * 58)
     upload_start_monitor(args.start)
 
