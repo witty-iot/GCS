@@ -97,12 +97,20 @@ def print_status(status, prefix="STATUS"):
     hb_age = status.get("heartbeat_age_ms")
     gps_age_text = "n/a" if gps_age is None or gps_age > 60000 else f"{gps_age / 1000:.1f}s"
     hb_age_text = "n/a" if hb_age is None or hb_age > 60000 else f"{hb_age / 1000:.1f}s"
+    gps_fix = status.get("gps_fix_type", 0)
+    sats = status.get("gps_satellites", 0)
+    ekf = status.get("ekf_flags", 0)
+    landed = status.get("landed_state", 0)
+    ack_cmd = status.get("last_ack_command", 0)
+    ack_result = status.get("last_ack_result", 255)
     print(
         f"[{prefix}] step={step_label(status)} running={'YES' if status.get('running') else 'NO'} "
         f"armed={'YES' if status.get('armed') else 'NO'} gps={'OK' if status.get('gps') else 'NO'} "
-        f"age={gps_age_text} hb_age={hb_age_text} alt={status.get('alt', 0):.1f}m "
+        f"fix={gps_fix} sats={sats} age={gps_age_text} hb_age={hb_age_text} "
+        f"ekf=0x{ekf:04X} landed={landed} alt={status.get('alt', 0):.1f}m "
         f"lat={status.get('lat', 0):.6f} lon={status.get('lon', 0):.6f} "
-        f"mode={status.get('mode', 0)} completed={'YES' if status.get('completed') else 'NO'} "
+        f"mode={status.get('mode', 0)} ack={ack_cmd}/{ack_result} "
+        f"completed={'YES' if status.get('completed') else 'NO'} "
         f"aborted={'YES' if status.get('aborted') else 'NO'}"
     )
     if status.get("last_abort"):
@@ -112,7 +120,9 @@ def print_status(status, prefix="STATUS"):
 def telemetry_is_fresh(status):
     return (
         status.get("gps")
+        and status.get("gps_fix_type", 0) >= 3
         and status.get("gps_age_ms", 999999) <= FRESH_TELEMETRY_MS
+        and status.get("gps_raw_age_ms", 999999) <= FRESH_TELEMETRY_MS
         and status.get("heartbeat_age_ms", 999999) <= FRESH_TELEMETRY_MS
     )
 
