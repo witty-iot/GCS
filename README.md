@@ -60,20 +60,25 @@ Password: DronePassword123
 
 ```text
 Arduino_esp_code/
-  esp_uploader.txt          ESP32 firmware / mission manager
+  esp_uploader.txt              ESP32 firmware / mission manager
 
 Missions/
-  mission_uploader.py       Guided takeoff, relay, loiter, land mission
-  mission_uploader2.py      Agriculture spray mission template
-  mission_uploader_test.py  No-takeoff arm + relay + disarm test
-  mode_test.py              Older/minimal mode-switch test
-  relay_test.py             Older/minimal relay-only test
+  mission_uploader.py           Guided takeoff, relay, loiter, land mission
+  mission_uploader2.py          Guided MAV_CMD_DO_REPOSITION test
+  mission_uploader_test.py      No-takeoff arm + relay + disarm test
+  mission_hover_guided_test.py  Pure-Guided hover test (no mode switch, no relay)
+  mission_hover_loiter_test.py  Guided takeoff + Loiter-hold hover test (no relay)
+  mission_brake_hover_test.py   Guided local offset move + zero-velocity brake test
+  mission_local_ned_test.py     Guided local offset position-hold test
+
+docs/
+  guided-mode-drift-diagnosis.md  Diagnosis of in-flight drift/instability issues
 
 README.md
 pyproject.toml
 ```
 
-Note: the active mission scripts use the current mission API port `14551`. The older minimal `mode_test.py` and `relay_test.py` currently default to `14550`; change their `ESP32_PORT` to `14551` before using them with the current ESP32 firmware.
+All mission scripts use the mission API port `14551`.
 
 ## Mission Command Protocol
 
@@ -183,18 +188,37 @@ The Python scripts use this status response for preflight checks and terminal mo
 
 ## Supported Mission Actions
 
+Two mission styles are supported and can be freely mixed within one mission:
+pure-Guided steps that drive the vehicle directly via MAVLink position/velocity
+targets (`reposition`, `fly_to`, `local_ned`, `brake_hover`), and `set_mode`,
+which hands control to one of ArduPilot's own flight modes (e.g. `LOITER`)
+using its own tuned position-hold controller instead.
+
 | Action | Parameters | What It Does |
 | --- | --- | --- |
 | `set_mode` | `mode` | Requests ArduPilot mode: `GUIDED`, `LOITER`, `RTL`, `LAND`, `AUTO`, `MANUAL` |
 | `arm` | none | Arms the drone and waits for heartbeat confirmation |
 | `disarm` | none | Disarms the drone and waits for confirmation |
 | `takeoff` | `alt` | Switches to GUIDED, arms, and commands takeoff to altitude in meters |
-| `fly_to` | `lat`, `lon`, `alt` | Sends waypoint command and waits until within radius/altitude tolerance |
-| `relay_on` | none | Turns ESP32 GPIO4 HIGH |
+| `fly_to` | `lat`, `lon`, `alt` | Sends an absolute Guided position target and waits until within radius/altitude tolerance |
+| `reposition` | `lat`, `lon`, `alt` | Sends `MAV_CMD_DO_REPOSITION` and waits until within radius/altitude tolerance |
+| `local_ned` | `x` (north m), `y` (east m), `z` (down m), `seconds` | Computes an absolute target that many meters from wherever the vehicle is when the step starts, flies there, then holds for `seconds` |
+| `brake_hover` | `seconds` | Holds a zero-velocity Guided target (resent every 500ms) for `seconds` |
+| `relay_on` | none | Turns ESP32 GPIO4 HIGH (relay is wired only to the ESP32, not the Pixhawk) |
 | `relay_off` | none | Turns ESP32 GPIO4 LOW |
-| `wait` | `seconds` | Holds the current mission step for the given time |
+| `wait` | `seconds` | Holds the current mission step for the given time — sends no commands, so in Guided mode the vehicle simply keeps its last position target |
 | `rtl` | none | Commands Return To Launch |
 | `land` | none | Commands LAND |
+
+`local_ned`'s `x`/`y`/`z` are a one-time North/East/Down offset from the
+vehicle's position when the step starts — the ESP32 converts that offset to
+a fixed absolute lat/lon/alt once, then resends *that* fixed target, the same
+way `fly_to`/`reposition` do. It deliberately does not send the offset itself
+as a repeating `MAV_FRAME_LOCAL_OFFSET_NED` message, since ArduPilot
+interprets that frame as "relative to the vehicle's position right now" on
+every message received — resending it periodically previously caused a
+runaway drift in the direction of the offset. See
+`docs/guided-mode-drift-diagnosis.md` for the full writeup.
 
 ## Mode Changes
 
@@ -206,7 +230,7 @@ Example mission step:
 { "action": "set_mode", "mode": "GUIDED" }
 ```
 
-The Python GCS does not directly switch modes itself. It uploads this JSON step to the ESP32, and the ESP32 firmware converts the mode name into an ArduPilot custom mode value before sending a MAVLink `SET_MODE` message to the Pixhawk.
+The Python GCS does not directly switch modes itself. It uploads this JSON step to the ESP32, and the ESP32 firmware converts the mode name into an ArduPilot custom mode value before sending it via `MAV_CMD_DO_SET_MODE` (the modern, recommended mode-change command — the firmware previously used the deprecated MAVLink1 `SET_MODE` message).
 
 Supported mode names in the current ESP32 firmware:
 
@@ -248,25 +272,19 @@ python Missions/mission_uploader.py --ip 192.168.4.1 --port 14551
 
 ### `Missions/mission_uploader2.py`
 
-Agriculture spray mission template:
+Guided `MAV_CMD_DO_REPOSITION` test:
 
 1. Arm
-2. Take off to `SPRAY_ALTITUDE`
-3. Fly to Point A
-4. Relay ON
-5. Fly slowly to Point B
-6. Relay OFF
-7. RTL
+2. Take off to `TARGET_ALTITUDE`
+3. Reposition to `TARGET_LAT`/`TARGET_LON`
+4. Wait `HOLD_SECONDS`
+5. Land
 
-Before running, edit:
-
-```python
-POINT_A_LAT = 0.000000
-POINT_A_LON = 0.000000
-POINT_B_LAT = 0.000100
-POINT_B_LON = 0.000100
-SPRAY_ALTITUDE = 2.5
-```
+Before running, edit `TARGET_LAT`/`TARGET_LON` to a nearby field coordinate.
+The script refuses to start if the target is farther than
+`--max-start-distance` (default 25m) from the current GPS fix, as a safety
+check against a stale/wrong coordinate — override with `--force-distance`
+only in a clear field.
 
 Run:
 
@@ -275,13 +293,6 @@ python Missions/mission_uploader2.py
 python Missions/mission_uploader2.py --start
 python Missions/mission_uploader2.py --status
 python Missions/mission_uploader2.py --stop
-```
-
-For slow spray speed, configure the flight controller before the mission, for example:
-
-```text
-WPNAV_SPEED = 100
-WPNAV_SPEED_MAX = 100
 ```
 
 ### `Missions/mission_uploader_test.py`
@@ -301,6 +312,35 @@ python Missions/mission_uploader_test.py
 ```
 
 This script waits for fresh heartbeat telemetry, uploads the mission, starts it, and monitors status until completion or abort.
+
+### `Missions/mission_hover_guided_test.py` and `Missions/mission_hover_loiter_test.py`
+
+A matched pair of simple flight tests, no relay involved, used to isolate
+whether in-flight drift tracks the flight mode or is common to both:
+
+- `mission_hover_guided_test.py`: arm → takeoff to `1.5m` → hold `5s` purely
+  in GUIDED (no new command sent during the hold) → land.
+- `mission_hover_loiter_test.py`: same flight, but switches to `LOITER` for
+  the hold instead of staying in GUIDED.
+
+If only the LOITER-hold flight drifts, the mode transition (or LOITER
+itself) is implicated. If both drift by a similar amount, the cause is
+common to both — most likely EKF/position-estimate quality (compass
+interference, vibration), since every ArduCopter mode holds position using
+the same EKF estimate. See `docs/guided-mode-drift-diagnosis.md`.
+
+Run either the same way:
+
+```bash
+python Missions/mission_hover_guided_test.py --start
+python Missions/mission_hover_loiter_test.py --start
+```
+
+### `Missions/mission_brake_hover_test.py` and `Missions/mission_local_ned_test.py`
+
+Guided-mode local-offset tests: arm → takeoff → `local_ned` move (5m north)
+→ either `brake_hover` (zero-velocity hold) or land directly. Useful for
+exercising the `local_ned`/`brake_hover` actions specifically.
 
 ## ESP32 Firmware
 
@@ -424,7 +464,8 @@ MAVLink UDP: 14550  Mission UDP: 14551
 
 - Verify relay IN is connected to GPIO4.
 - Confirm relay VCC/GND and common ground.
-- Run `mission_uploader_test.py` for a simple arm/relay/disarm path, or fix `relay_test.py` to use port `14551` for a relay-only test.
+- Run `mission_uploader_test.py` for a simple arm/relay/disarm path (no takeoff).
+- If drift/instability appears whenever the relay is on (e.g. driving a pump), see the EKF/EMI discussion in `docs/guided-mode-drift-diagnosis.md` — relay/pump switching that isn't wired to the Pixhawk can still corrupt the compass or vibration readings the Pixhawk's own EKF depends on.
 
 ## Development Notes
 
