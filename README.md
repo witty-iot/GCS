@@ -46,6 +46,7 @@ Pixhawk / ArduPilot Flight Controller
 | ESP32 WiFi AP | `192.168.4.1` | Laptop connects to this network |
 | Mission command API | UDP `192.168.4.1:14551` | Python mission scripts |
 | MAVLink bridge | UDP `192.168.4.1:14550` | QGroundControl / Mission Planner / MAVLink clients |
+| MAVLink bridge (logger copy) | UDP broadcast `192.168.4.255:14552` | `Missions/flight_logger.py` — always-broadcast duplicate of 14550, on its own port, so it works even while Mission Planner/QGC holds 14550 exclusively |
 | ESP32 serial monitor | USB serial `115200` baud | Firmware logs |
 | Pixhawk UART link | UART `57600` baud | ESP32 <-> Pixhawk MAVLink |
 
@@ -180,9 +181,20 @@ The ESP32 replies with JSON:
   "alt": 2.5,
   "armed": false,
   "mode": 5,
-  "last_abort": ""
+  "last_abort": "",
+  "last_statustext": "",
+  "last_statustext_severity": 255,
+  "last_important_text": "",
+  "last_important_severity": 255
 }
 ```
+
+`last_statustext` is the single most recent Pixhawk STATUSTEXT of any
+severity — routine chatter (GPS/EKF NOTICE/INFO/DEBUG messages) overwrites it
+constantly. `last_important_text`/`last_important_severity` only update on
+severity <= WARNING (EMERGENCY..WARNING), so a real `PreArm: ...`/arm-reject
+reason survives that chatter until a script actually reads it, instead of
+being silently clobbered before the next `STATUS` poll.
 
 The Python scripts use this status response for preflight checks and terminal monitoring.
 
@@ -319,7 +331,10 @@ A matched pair of simple flight tests, no relay involved, used to isolate
 whether in-flight drift tracks the flight mode or is common to both:
 
 - `mission_hover_guided_test.py`: arm → takeoff to `1.5m` → hold `5s` purely
-  in GUIDED (no new command sent during the hold) → land.
+  in GUIDED, actively via a `local_ned` step with a zero north/east/down
+  offset (the ESP32 resends the same absolute position target every 2s
+  instead of just hoping the vehicle stays on whatever takeoff left it on)
+  → land.
 - `mission_hover_loiter_test.py`: same flight, but switches to `LOITER` for
   the hold instead of staying in GUIDED.
 
@@ -335,6 +350,11 @@ Run either the same way:
 python Missions/mission_hover_guided_test.py --start
 python Missions/mission_hover_loiter_test.py --start
 ```
+
+Both write a detailed timestamped log to `logs/` on every run (success,
+abort, or Ctrl+C) — see Flight Logs below. Both also accept `--force` to skip
+the script's own GPS-fix wait for indoor testing (Pixhawk's own arming checks
+still run) — see Preflight Never Gets GPS under Troubleshooting.
 
 ### `Missions/mission_brake_hover_test.py` and `Missions/mission_local_ned_test.py`
 
@@ -424,6 +444,78 @@ Fresh telemetry means GPS and/or heartbeat age is below `5000 ms`.
 - Takeoff timeout is `20 s`.
 - Unsupported mode names are skipped by the ESP32 firmware.
 - Arming checks remain controlled by the Pixhawk/ArduPilot; the GCS does not bypass them.
+- **Never run `arm`/`takeoff` mission steps on a bench without propellers removed
+  AND the vehicle physically restrained.** A `takeoff` step arms and commands a
+  real climb; ArduPilot's altitude controller sees no climb from bare motors and
+  keeps increasing throttle trying to reach the target altitude, potentially all
+  the way to max — this is normal ArduPilot behavior, not a bug, and no
+  script/firmware change here prevents it. With propellers attached and
+  unrestrained, this step would fly. Bench-test comms/arming with Mission
+  Planner's Motor Test tool (bounded, short, per-motor) instead of a full
+  autonomous mission.
+- `send_start()`/`send_stop()` retry a lost UDP ack up to 3x, and `send_start()`
+  falls back to a `STATUS` query before ever declaring failure — a dropped ack
+  does not mean the vehicle didn't arm/start; see Firmware Reliability Notes.
+
+## Firmware Reliability Notes
+
+- All ESP32 debug logging goes through `debugf()`/`debugln()` instead of
+  `Serial.print*` directly. Plain `Serial` calls block once the USB TX
+  buffer fills if no serial monitor is draining it — with debug logging on
+  nearly every parsed MAVLink message, that could freeze `loop()` entirely
+  mid-flight (no more STATUS replies, no more command resends, no more
+  abort/timeout checks). `debugf()`/`debugln()` check
+  `Serial.availableForWrite()` first and silently drop the line instead of
+  blocking, so a full USB buffer can never stall flight control.
+- `EKF_STATUS_REPORT` flags are read from the correct byte offset (20, after
+  five variance floats — verified against the generated MAVLink headers) — a
+  previous offset bug made `ekf_flags` in `STATUS` replies meaningless.
+- `STATUSTEXT` messages (e.g. the human-readable PreArm/arm-reject reason)
+  are now parsed and exposed as `last_statustext` /
+  `last_statustext_severity` in `STATUS`, so an `ARM rejected by autopilot`
+  abort shows *why* without needing Mission Planner/QGC connected.
+- Since routine GPS/EKF chatter (severity NOTICE/INFO/DEBUG) shares the same
+  `last_statustext` field and arrives continuously, it can overwrite a real
+  PreArm/arm-reject message before a script's next `STATUS` poll ever reads
+  it. `last_important_text`/`last_important_severity` track a second buffer
+  that only updates on severity <= WARNING, so the real reason survives.
+- `sendUdpText("OK START")` fires before `executeMission()` ever runs, so
+  structurally it should never be slower than the ARM/mode-switch
+  `COMMAND_ACK`s that follow — but it's still a single UDP datagram with no
+  delivery guarantee, and doubling outbound traffic via `LOGGER_UDP_PORT`
+  right as Pixhawk ramps up post-arm telemetry can be enough to drop it in
+  a burst. A lost `OK START` does **not** mean the mission didn't start: the
+  Python scripts' `send_start()` retries, and if still inconclusive, checks
+  `STATUS` directly rather than assuming failure and exiting on an armed,
+  flying vehicle.
+
+## Flight Logs
+
+`mission_hover_guided_test.py` and `mission_hover_loiter_test.py` write a
+detailed timestamped log to `logs/` every time they run — on success,
+failure, abort, or Ctrl+C — via `Missions/flight_logger.py`. In addition to
+the JSON `STATUS` fields the terminal already prints, the logger listens on
+the ESP32's dedicated logger broadcast (UDP `14552` — see Network And Ports)
+and decodes it directly, so the log captures things `STATUS` never exposed:
+every `STATUSTEXT` ArduCopter sent (the same messages Mission Planner's
+Messages tab shows, not just the single most recent one), every arm/disarm
+and mode change, every `COMMAND_ACK` result, and periodic
+GPS/battery/EKF/vibration snapshots.
+
+Notes:
+- This is passive/best-effort: it only listens, it never sends anything to
+  the vehicle. `14552` is a fixed always-broadcast duplicate of the MAVLink
+  stream that Mission Planner/QGC never touches, specifically so it keeps
+  working even while Mission Planner is connected and holding `14550`
+  exclusively (Windows lets a .NET UDP socket like Mission Planner's bind a
+  port exclusively, which blocks any other process — including this logger —
+  from also binding that same port). If the ESP32 hasn't been reflashed with
+  this dedicated-port firmware yet, pass `--mav-port 14550` to fall back to
+  the old shared port (works, but only when Mission Planner/QGC isn't
+  connected at the same time). Either way, if the port can't be opened for
+  any reason, the log still gets written with the script's own milestone
+  notes, just without the raw Pixhawk message capture.
+- `logs/*.log` is gitignored — these are per-run artifacts, not source.
 
 ## Troubleshooting
 
@@ -448,10 +540,17 @@ MAVLink UDP: 14550  Mission UDP: 14551
 
 ### Preflight Never Gets GPS
 
-- Move outside with clear sky.
+- Move outside with clear sky. Indoors, `gps_satellites` will sit at `0` and
+  `gps_fix_type` will never reach 3 — this is expected, not a Pixhawk
+  rejection, and the script's own local wait for a GPS fix will time out
+  every time no matter how long you wait.
 - Wait for GPS lock.
 - Check GPS module and antenna.
 - Confirm Pixhawk is publishing `GLOBAL_POSITION_INT`.
+- To actually reach an ARM attempt indoors (e.g. to see Pixhawk's *real*
+  PreArm reason instead of just a local timeout), run with `--force` — this
+  skips only the script's own GPS-fix wait; Pixhawk's own arming checks are
+  never bypassed and will still reject ARM if it isn't actually ready.
 
 ### Mission Aborts During Takeoff
 

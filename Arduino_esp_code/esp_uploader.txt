@@ -28,6 +28,38 @@
 #include <WiFiUdp.h>
 #include <ArduinoJson.h>
 #include <math.h>
+#include <stdarg.h>
+
+// ─── Non-blocking Debug Logging ─────────────────────────────────────────────
+// Serial.print/printf block once the USB TX buffer fills if nothing is
+// draining it (e.g. no serial monitor attached during an actual flight).
+// A blocked Serial call freezes loop() entirely — no more STATUS replies,
+// no more command resends, no more abort/timeout checks — for as long as
+// the output goes unread, which in practice can be indefinitely. These
+// wrappers drop the line instead of blocking whenever the TX buffer is
+// nearly full, so debug logging can never stall flight control.
+// The guard must reserve at least as much space as the largest possible
+// formatted line (sizeof(buf) below) — if a message longer than whatever
+// space happens to be free is allowed through, Serial.print() still blocks
+// on the remainder once that space runs out. Requiring the FULL worst-case
+// line size to be free before writing guarantees the write always completes
+// without ever needing to wait for the buffer to drain.
+static const size_t DEBUG_LINE_MAX = 200;
+
+void debugf(const char* fmt, ...) {
+  if (Serial.availableForWrite() < (int)DEBUG_LINE_MAX) return;
+  char buf[DEBUG_LINE_MAX];
+  va_list args;
+  va_start(args, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  Serial.print(buf);
+}
+
+void debugln(const char* msg) {
+  if (Serial.availableForWrite() < (int)DEBUG_LINE_MAX) return;
+  Serial.println(msg);
+}
 
 // ─── Hardware ────────────────────────────────────────────────────────────────
 #define RELAY_PIN   4
@@ -40,9 +72,18 @@ const char* WIFI_SSID  = "ESP32_Drone_Network";
 const char* WIFI_PASS  = "DronePassword123";
 const int   MAVLINK_UDP_PORT = 14550;
 const int   MISSION_UDP_PORT = 14551;
+// Second, independent copy of the raw MAVLink stream, always broadcast (never
+// narrowed to a single unicast target the way MAVLINK_UDP_PORT is below). Exists
+// so a passive telemetry logger can bind its own port and capture the full stream
+// even while Mission Planner/QGC is connected and holding MAVLINK_UDP_PORT
+// exclusively (Windows/.NET UDP sockets default to exclusive-bind, which blocks
+// any other process from also binding that same port).
+const int   LOGGER_UDP_PORT  = 14552;
 WiFiUDP mavUdp;
 WiFiUDP missionUdp;
+WiFiUDP logUdp;
 IPAddress mavTargetIP(192, 168, 4, 255);
+IPAddress broadcastIP(192, 168, 4, 255);
 
 // ─── ArduPilot custom mode values (Copter) ──────────────────────────────────
 const uint32_t MODE_MANUAL = 0;
@@ -60,6 +101,7 @@ const uint32_t MAVLINK_MSG_VFR_HUD             = 74;
 const uint32_t MAVLINK_MSG_COMMAND_ACK         = 77;
 const uint32_t MAVLINK_MSG_EKF_STATUS_REPORT   = 193;
 const uint32_t MAVLINK_MSG_EXTENDED_SYS_STATE  = 245;
+const uint32_t MAVLINK_MSG_STATUSTEXT          = 253;
 
 const uint16_t MAV_CMD_NAV_RETURN_TO_LAUNCH  = 20;
 const uint16_t MAV_CMD_NAV_LAND              = 21;
@@ -112,6 +154,16 @@ float         stepTargetLat  = 0.0f;   // absolute target computed once per loca
 float         stepTargetLon  = 0.0f;
 float         stepTargetAlt  = 0.0f;
 char          lastAbortReason[80] = "";
+char          lastStatusText[51] = "";  // most recent Pixhawk STATUSTEXT, any severity
+uint8_t       lastStatusTextSeverity = 255;
+uint32_t      last_statustext_ms = 0;
+// Separate from lastStatusText above: routine chatter (GPS/EKF NOTICE/INFO/DEBUG
+// messages, severity 5-7) arrives continuously and would otherwise overwrite a real
+// PreArm/arm-reject reason (severity 0-4) before the next STATUS poll ever reads it.
+// This buffer only updates on severity <= WARNING, so it survives that chatter.
+char          lastImportantText[51] = "";
+uint8_t       lastImportantSeverity = 255;
+uint32_t      last_important_ms = 0;
 
 // ─── Drone Telemetry State ───────────────────────────────────────────────────
 volatile float    current_lat        = 0.0f;
@@ -161,6 +213,7 @@ static uint8_t crc_extra(uint32_t id) {
     case MAVLINK_MSG_COMMAND_ACK:         return 143;
     case MAVLINK_MSG_EKF_STATUS_REPORT:   return 71;
     case MAVLINK_MSG_EXTENDED_SYS_STATE:  return 130;
+    case MAVLINK_MSG_STATUSTEXT:          return 83;
     default: return 0;
   }
 }
@@ -172,7 +225,7 @@ static void mavlink_dispatch(uint32_t msg_id, uint8_t payload_len, uint8_t* payl
     drone_base_mode   = payload[6];
     drone_armed       = (payload[6] & 0x80) != 0;
     last_heartbeat_ms = millis();
-    Serial.printf("[HB] armed=%d base_mode=0x%02X custom_mode=%u\n",
+    debugf("[HB] armed=%d base_mode=0x%02X custom_mode=%u\n",
                   (int)drone_armed, drone_base_mode, drone_custom_mode);
   }
   else if (msg_id == MAVLINK_MSG_GLOBAL_POSITION_INT && payload_len >= 28) {
@@ -185,7 +238,7 @@ static void mavlink_dispatch(uint32_t msg_id, uint8_t payload_len, uint8_t* payl
     current_alt = (float)ralt_r / 1000.0f;
     last_gps_ms = millis();
     gps_valid = (gps_fix_type >= 3);
-    Serial.printf("[GPS] lat=%.6f lon=%.6f alt=%.2fm\n",
+    debugf("[GPS] lat=%.6f lon=%.6f alt=%.2fm\n",
                   current_lat, current_lon, current_alt);
   }
   else if (msg_id == MAVLINK_MSG_GPS_RAW_INT && payload_len >= 30) {
@@ -193,22 +246,50 @@ static void mavlink_dispatch(uint32_t msg_id, uint8_t payload_len, uint8_t* payl
     gps_satellites = payload[29];
     last_gps_raw_ms = millis();
     gps_valid = (gps_fix_type >= 3 && last_gps_ms != 0);
-    Serial.printf("[GPS_RAW] fix=%u sats=%u\n", gps_fix_type, gps_satellites);
+    debugf("[GPS_RAW] fix=%u sats=%u\n", gps_fix_type, gps_satellites);
   }
   else if (msg_id == MAVLINK_MSG_COMMAND_ACK && payload_len >= 3) {
     memcpy((void*)&last_ack_command, payload, 2);
     last_ack_result = payload[2];
     last_ack_ms = millis();
-    Serial.printf("[ACK] command=%u result=%u\n", last_ack_command, last_ack_result);
+    debugf("[ACK] command=%u result=%u\n", last_ack_command, last_ack_result);
   }
-  else if (msg_id == MAVLINK_MSG_EKF_STATUS_REPORT && payload_len >= 2) {
-    memcpy((void*)&ekf_flags, payload, 2);
+  else if (msg_id == MAVLINK_MSG_EKF_STATUS_REPORT && payload_len >= 22) {
+    // Wire layout (ardupilotmega.xml EKF_STATUS_REPORT #193): 5 base floats
+    // (velocity/pos_horiz/pos_vert/compass/terrain_alt variance, 20 bytes),
+    // THEN the uint16 flags field at offset 20 — MAVLink packs fields
+    // largest-type-first, not in declaration order. MIN_LEN is 22 (base
+    // fields only); airspeed_variance at offset 22 is a MAVLink2-only
+    // extension some senders omit, so the length check must not require it.
+    // Reading payload[0..1] (as this originally did) read half of the first
+    // float; reading payload[24..25] (an earlier fix attempt, also wrong)
+    // read into/past the optional extension instead of the real flags field.
+    memcpy((void*)&ekf_flags, payload + 20, 2);
     last_ekf_ms = millis();
-    Serial.printf("[EKF] flags=0x%04X\n", ekf_flags);
+    debugf("[EKF] flags=0x%04X\n", ekf_flags);
   }
   else if (msg_id == MAVLINK_MSG_EXTENDED_SYS_STATE && payload_len >= 2) {
     drone_landed_state = payload[1];
-    Serial.printf("[EXT_STATE] landed_state=%u\n", drone_landed_state);
+    debugf("[EXT_STATE] landed_state=%u\n", drone_landed_state);
+  }
+  else if (msg_id == MAVLINK_MSG_STATUSTEXT && payload_len >= 2) {
+    // payload[0] = severity, payload[1..] = text (not guaranteed null-terminated)
+    uint8_t severity = payload[0];
+    size_t text_len = payload_len - 1;
+    if (text_len > sizeof(lastStatusText) - 1) text_len = sizeof(lastStatusText) - 1;
+    memcpy(lastStatusText, payload + 1, text_len);
+    lastStatusText[text_len] = '\0';
+    lastStatusTextSeverity = severity;
+    last_statustext_ms = millis();
+    debugf("[STATUSTEXT] sev=%u %s\n", severity, lastStatusText);
+
+    // MAV_SEVERITY: 0=EMERGENCY .. 4=WARNING are real problems (e.g. "PreArm: ...");
+    // 5=NOTICE/6=INFO/7=DEBUG is routine chatter that must not clobber a real reason.
+    if (severity <= 4) {
+      memcpy(lastImportantText, lastStatusText, text_len + 1);
+      lastImportantSeverity = severity;
+      last_important_ms = millis();
+    }
   }
 }
 
@@ -307,6 +388,11 @@ void forwardMavlinkToUdp(const uint8_t* data, size_t len) {
   mavUdp.beginPacket(mavTargetIP, MAVLINK_UDP_PORT);
   mavUdp.write(data, len);
   mavUdp.endPacket();
+
+  // Always-broadcast duplicate on its own port -- see LOGGER_UDP_PORT comment above.
+  logUdp.beginPacket(broadcastIP, LOGGER_UDP_PORT);
+  logUdp.write(data, len);
+  logUdp.endPacket();
 }
 
 void parsePixhawkTelemetry() {
@@ -379,6 +465,12 @@ void sendStatusReply() {
   status["last_ack_result"] = last_ack_result;
   status["last_ack_age_ms"] = last_ack_ms ? (millis() - last_ack_ms) : 4294967295UL;
   status["last_abort"] = lastAbortReason;
+  status["last_statustext"] = lastStatusText;
+  status["last_statustext_severity"] = lastStatusTextSeverity;
+  status["last_statustext_age_ms"] = last_statustext_ms ? (millis() - last_statustext_ms) : 4294967295UL;
+  status["last_important_text"] = lastImportantText;
+  status["last_important_severity"] = lastImportantSeverity;
+  status["last_important_age_ms"] = last_important_ms ? (millis() - last_important_ms) : 4294967295UL;
 
   char out[1024];
   size_t n = serializeJson(status, out, sizeof(out));
@@ -444,7 +536,7 @@ void sendCommandLong(uint16_t cmd,
   payload[31] = DRONE_COMP_ID;
   payload[32] = 0; // confirmation
   sendMavlink1(76, 152, payload, 33);
-  Serial.printf("[TX] COMMAND_LONG cmd=%u\n", cmd);
+  debugf("[TX] COMMAND_LONG cmd=%u\n", cmd);
 }
 
 void sendCommandInt(uint16_t cmd, uint8_t frame,
@@ -465,7 +557,7 @@ void sendCommandInt(uint16_t cmd, uint8_t frame,
   payload[33] = 0; // current
   payload[34] = 0; // autocontinue
   sendMavlink1(75, 158, payload, 35);
-  Serial.printf("[TX] COMMAND_INT cmd=%u frame=%u\n", cmd, frame);
+  debugf("[TX] COMMAND_INT cmd=%u frame=%u\n", cmd, frame);
 }
 
 // Shared builder for SET_POSITION_TARGET_LOCAL_NED (msg 84) and
@@ -522,7 +614,7 @@ void cmdLand() {
 void cmdSetMode(uint32_t custom_mode) {
   const float BASE_MODE_CUSTOM_ENABLED = 1.0f; // MAV_MODE_FLAG_CUSTOM_MODE_ENABLED
   sendCommandLong(MAV_CMD_DO_SET_MODE, BASE_MODE_CUSTOM_ENABLED, (float)custom_mode, 0, 0, 0, 0, 0);
-  Serial.printf("[TX] DO_SET_MODE custom=%u\n", custom_mode);
+  debugf("[TX] DO_SET_MODE custom=%u\n", custom_mode);
 }
 
 void requestMessageInterval(uint32_t msg_id, float hz) {
@@ -544,7 +636,7 @@ void cmdGuidedPosition(float lat, float lon, float alt) {
   int32_t lon_int = (int32_t)(lon * 1e7f);
   sendPositionTarget(86, 6 /*GLOBAL_RELATIVE_ALT_INT*/, POSMASK_POSITION_ONLY,
                       &lat_int, &lon_int, &alt, 0, 0, 0);
-  Serial.printf("[TX] SET_POSITION_TARGET_GLOBAL_INT lat=%.6f lon=%.6f alt=%.1f\n", lat, lon, alt);
+  debugf("[TX] SET_POSITION_TARGET_GLOBAL_INT lat=%.6f lon=%.6f alt=%.1f\n", lat, lon, alt);
 }
 
 // Zero-velocity guided hold (SET_POSITION_TARGET_LOCAL_NED, velocity-only).
@@ -554,7 +646,7 @@ void cmdLocalVelocityTarget(float vx, float vy, float vz) {
   float zero = 0.0f;
   sendPositionTarget(84, 1 /*MAV_FRAME_LOCAL_NED*/, POSMASK_VELOCITY_ONLY,
                       &zero, &zero, &zero, vx, vy, vz);
-  Serial.printf("[TX] SET_POSITION_TARGET_LOCAL_NED vel vx=%.1f vy=%.1f vz=%.1f\n", vx, vy, vz);
+  debugf("[TX] SET_POSITION_TARGET_LOCAL_NED vel vx=%.1f vy=%.1f vz=%.1f\n", vx, vy, vz);
 }
 
 uint32_t getModeValue(const String& mode_name) {
@@ -599,19 +691,19 @@ void abortMission(const char* reason) {
   strncpy(lastAbortReason, reason, sizeof(lastAbortReason) - 1);
   lastAbortReason[sizeof(lastAbortReason) - 1] = '\0';
   digitalWrite(RELAY_PIN, LOW);
-  Serial.printf("[ABORT] %s — commanding LAND\n", reason);
+  debugf("[ABORT] %s — commanding LAND\n", reason);
   cmdLand();
 }
 
 void stepRelay(bool on) {
   digitalWrite(RELAY_PIN, on ? HIGH : LOW);
-  Serial.printf("[Step] relay %s\n", on ? "ON" : "OFF");
+  debugf("[Step] relay %s\n", on ? "ON" : "OFF");
   currentStep++;
 }
 
 void stepSetMode(JsonObject step) {
   if (!step["mode"].is<const char*>() && !step["mode"].is<String>()) {
-    Serial.println("[Step] set_mode missing mode value — skipping");
+    debugln("[Step] set_mode missing mode value — skipping");
     stepStartTime = 0;
     currentStep++;
     return;
@@ -619,7 +711,7 @@ void stepSetMode(JsonObject step) {
   String mode_name = step["mode"].as<String>();
   uint32_t target_mode = getModeValue(mode_name);
   if (target_mode == UINT32_MAX) {
-    Serial.printf("[Step] unsupported mode '%s' — skipping\n", mode_name.c_str());
+    debugf("[Step] unsupported mode '%s' — skipping\n", mode_name.c_str());
     stepStartTime = 0;
     currentStep++;
     return;
@@ -628,15 +720,15 @@ void stepSetMode(JsonObject step) {
   if (stepStartTime == 0) {
     cmdSetMode(target_mode);
     stepStartTime = millis();
-    Serial.printf("[Step] requesting mode %s (custom=%u)\n", mode_name.c_str(), (unsigned int)target_mode);
+    debugf("[Step] requesting mode %s (custom=%u)\n", mode_name.c_str(), (unsigned int)target_mode);
   }
 
   if (drone_custom_mode == target_mode) {
-    Serial.printf("[Step] mode %s confirmed\n", mode_name.c_str());
+    debugf("[Step] mode %s confirmed\n", mode_name.c_str());
     stepStartTime = 0;
     currentStep++;
   } else if (millis() - stepStartTime > MODE_CONFIRM_TIMEOUT_MS) {
-    Serial.printf("[Step] mode %s timeout — continuing anyway\n", mode_name.c_str());
+    debugf("[Step] mode %s timeout — continuing anyway\n", mode_name.c_str());
     stepStartTime = 0;
     currentStep++;
   }
@@ -646,7 +738,7 @@ void stepWait(JsonObject step) {
   uint32_t dur_ms = (uint32_t)step["seconds"].as<int>() * 1000UL;
   if (stepStartTime == 0) {
     stepStartTime = millis();
-    Serial.printf("[Step] waiting %u s\n", dur_ms / 1000);
+    debugf("[Step] waiting %u s\n", dur_ms / 1000);
   }
   if (millis() - stepStartTime >= dur_ms) {
     stepStartTime = 0;
@@ -656,7 +748,7 @@ void stepWait(JsonObject step) {
 
 void stepArm() {
   if (drone_armed) {
-    Serial.println("[Step] Already armed — skipping");
+    debugln("[Step] Already armed — skipping");
     stepStartTime = lastWpSendTime = 0;
     currentStep++;
     return;
@@ -665,10 +757,10 @@ void stepArm() {
     cmdSetMode(MODE_GUIDED);
     cmdArm(true);
     stepStartTime = lastWpSendTime = millis();
-    Serial.println("[Step] ARM commanded — waiting for confirmation...");
+    debugln("[Step] ARM commanded — waiting for confirmation...");
   }
   if (millis() - lastWpSendTime >= ARM_RETRY_INTERVAL) {
-    Serial.println("[Step] Re-sending ARM...");
+    debugln("[Step] Re-sending ARM...");
     cmdSetMode(MODE_GUIDED);
     cmdArm(true);
     lastWpSendTime = millis();
@@ -679,7 +771,7 @@ void stepArm() {
     return;
   }
   if (drone_armed) {
-    Serial.println("[Step] Drone ARMED confirmed");
+    debugln("[Step] Drone ARMED confirmed");
     stepStartTime = lastWpSendTime = 0;
     currentStep++;
   } else if (millis() - stepStartTime > ARM_TIMEOUT_MS) {
@@ -692,18 +784,18 @@ void stepDisarm() {
   if (stepStartTime == 0) {
     cmdArm(false);
     stepStartTime = millis();
-    Serial.println("[Step] DISARM commanded — waiting for confirmation...");
+    debugln("[Step] DISARM commanded — waiting for confirmation...");
   }
   if (!drone_armed) {
-    Serial.println("[Step] Drone DISARMED confirmed");
+    debugln("[Step] Drone DISARMED confirmed");
     stepStartTime = 0;
     currentStep++;
   } else if (millis() - stepStartTime > DISARM_TIMEOUT_MS) {
-    Serial.println("[Step] DISARM timeout");
+    debugln("[Step] DISARM timeout");
     stepStartTime = 0;
     currentStep++;
   } else if (commandRejectedSince(MAV_CMD_COMPONENT_ARM_DISARM, stepStartTime)) {
-    Serial.println("[Step] DISARM rejected by autopilot");
+    debugln("[Step] DISARM rejected by autopilot");
     stepStartTime = 0;
     currentStep++;
   }
@@ -716,7 +808,7 @@ void stepTakeoff(JsonObject step) {
     cmdArm(true);
     stepStartTime = millis();
     lastWpSendTime = 0;
-    Serial.printf("[Step] preparing takeoff to %.1fm\n", alt);
+    debugf("[Step] preparing takeoff to %.1fm\n", alt);
   }
   if (!drone_armed) {
     if (millis() - lastWpSendTime >= ARM_RETRY_INTERVAL) {
@@ -732,14 +824,14 @@ void stepTakeoff(JsonObject step) {
   if (lastWpSendTime == 0) {
     cmdTakeoff(alt);
     stepStartTime = lastWpSendTime = millis();
-    Serial.printf("[Step] takeoff command sent to %.1fm\n", alt);
+    debugf("[Step] takeoff command sent to %.1fm\n", alt);
   }
   if (commandRejectedSince(MAV_CMD_NAV_TAKEOFF, stepStartTime)) {
     abortMission("takeoff rejected by autopilot");
     return;
   }
   if (telemetryFresh() && fabsf(current_alt - alt) <= ALT_REACHED_TOLERANCE_M) {
-    Serial.println("[Step] takeoff altitude reached");
+    debugln("[Step] takeoff altitude reached");
     stepStartTime = lastWpSendTime = 0;
     currentStep++;
   } else if (millis() - stepStartTime > TAKEOFF_TIMEOUT_MS) {
@@ -760,7 +852,7 @@ void stepReposition(JsonObject step) {
     cmdSetMode(MODE_GUIDED);
     cmdReposition(tlat, tlon, talt);
     stepStartTime = lastWpSendTime = millis();
-    Serial.printf("[Step] reposition lat=%.6f lon=%.6f alt=%.1f\n", tlat, tlon, talt);
+    debugf("[Step] reposition lat=%.6f lon=%.6f alt=%.1f\n", tlat, tlon, talt);
   }
   if (millis() - lastWpSendTime >= WP_SEND_INTERVAL) {
     cmdReposition(tlat, tlon, talt);
@@ -774,9 +866,9 @@ void stepReposition(JsonObject step) {
 
   float dist = haversine(current_lat, current_lon, tlat, tlon);
   float alt_err = fabsf(current_alt - talt);
-  Serial.printf("[Reposition] dist=%.1fm alt_err=%.1fm\n", dist, alt_err);
+  debugf("[Reposition] dist=%.1fm alt_err=%.1fm\n", dist, alt_err);
   if (dist <= WP_RADIUS_M && alt_err <= WP_ALT_ERR_M) {
-    Serial.println("[Step] reposition target REACHED");
+    debugln("[Step] reposition target REACHED");
     stepStartTime = lastWpSendTime = 0;
     currentStep++;
   }
@@ -795,7 +887,7 @@ void stepFlyTo(JsonObject step) {
     cmdSetMode(MODE_GUIDED);
     cmdGuidedPosition(tlat, tlon, talt);
     stepStartTime = lastWpSendTime = millis();
-    Serial.printf("[Step] fly_to lat=%.6f lon=%.6f alt=%.1f\n", tlat, tlon, talt);
+    debugf("[Step] fly_to lat=%.6f lon=%.6f alt=%.1f\n", tlat, tlon, talt);
   }
   if (millis() - lastWpSendTime >= WP_SEND_INTERVAL) {
     cmdGuidedPosition(tlat, tlon, talt);
@@ -805,9 +897,9 @@ void stepFlyTo(JsonObject step) {
 
   float dist = haversine(current_lat, current_lon, tlat, tlon);
   float alt_err = fabsf(current_alt - talt);
-  Serial.printf("[Nav] dist=%.1fm alt_err=%.1fm\n", dist, alt_err);
+  debugf("[Nav] dist=%.1fm alt_err=%.1fm\n", dist, alt_err);
   if (dist <= WP_RADIUS_M && alt_err <= WP_ALT_ERR_M) {
-    Serial.println("[Step] waypoint REACHED");
+    debugln("[Step] waypoint REACHED");
     stepStartTime = lastWpSendTime = 0;
     currentStep++;
   }
@@ -843,7 +935,7 @@ void stepLocalNed(JsonObject step) {
     cmdGuidedPosition(stepTargetLat, stepTargetLon, stepTargetAlt);
     stepStartTime = lastWpSendTime = millis();
     stepHoldStartTime = 0;
-    Serial.printf("[Step] local_ned north=%.1fm east=%.1fm down=%.1fm -> lat=%.6f lon=%.6f alt=%.1f\n",
+    debugf("[Step] local_ned north=%.1fm east=%.1fm down=%.1fm -> lat=%.6f lon=%.6f alt=%.1f\n",
                   north_m, east_m, down_m, stepTargetLat, stepTargetLon, stepTargetAlt);
   }
   if (millis() - lastWpSendTime >= WP_SEND_INTERVAL) {
@@ -858,7 +950,7 @@ void stepLocalNed(JsonObject step) {
 
   if (arrived && stepHoldStartTime == 0) {
     stepHoldStartTime = millis();
-    Serial.println("[Step] local_ned target reached — holding");
+    debugln("[Step] local_ned target reached — holding");
   }
   if (arrived && millis() - stepHoldStartTime >= hold_ms) {
     stepStartTime = lastWpSendTime = stepHoldStartTime = 0;
@@ -872,7 +964,7 @@ void stepBrakeHover(JsonObject step) {
     cmdSetMode(MODE_GUIDED);
     cmdLocalVelocityTarget(0, 0, 0);
     stepStartTime = lastWpSendTime = millis();
-    Serial.printf("[Step] brake_hover zero velocity for %us\n", hold_ms / 1000);
+    debugf("[Step] brake_hover zero velocity for %us\n", hold_ms / 1000);
   }
   if (millis() - lastWpSendTime >= VELOCITY_RESEND_INTERVAL) {
     cmdLocalVelocityTarget(0, 0, 0);
@@ -886,7 +978,7 @@ void stepBrakeHover(JsonObject step) {
 
 void stepRtl() {
   cmdRTL();
-  Serial.println("[Step] RTL commanded");
+  debugln("[Step] RTL commanded");
   currentStep++;
 }
 
@@ -894,7 +986,7 @@ void stepLand() {
   if (stepStartTime == 0) {
     cmdLand();
     stepStartTime = lastWpSendTime = millis();
-    Serial.println("[Step] LAND commanded — waiting for landed confirmation...");
+    debugln("[Step] LAND commanded — waiting for landed confirmation...");
   }
   if (millis() - lastWpSendTime >= LAND_RESEND_INTERVAL) {
     cmdLand();
@@ -906,7 +998,7 @@ void stepLand() {
   }
   if (drone_landed_state == MAV_LANDED_STATE_ON_GROUND ||
       (!drone_armed && millis() - stepStartTime > LAND_DISARM_GRACE_MS)) {
-    Serial.println("[Step] LAND confirmed");
+    debugln("[Step] LAND confirmed");
     stepStartTime = lastWpSendTime = 0;
     currentStep++;
   } else if (millis() - stepStartTime > LAND_CONFIRM_TIMEOUT_MS) {
@@ -921,7 +1013,7 @@ void executeMission() {
     missionCompleted = true;
     missionAborted = false;
     digitalWrite(RELAY_PIN, LOW);
-    Serial.println("[Mission] COMPLETE");
+    debugln("[Mission] COMPLETE");
     return;
   }
 
@@ -942,7 +1034,7 @@ void executeMission() {
   else if (action == "rtl")         stepRtl();
   else if (action == "land")        stepLand();
   else {
-    Serial.printf("[Step] unknown action '%s' — skipping\n", action.c_str());
+    debugf("[Step] unknown action '%s' — skipping\n", action.c_str());
     currentStep++;
   }
 }
@@ -951,13 +1043,13 @@ void executeMission() {
 void handleMissionCommand(const String& msg) {
   if (msg == "START") {
     if (missionRunning) {
-      Serial.println("[UDP] WARNING: already running — ignoring START");
+      debugln("[UDP] WARNING: already running — ignoring START");
       sendUdpText("ERROR already_running");
     } else if (!missionDoc["steps"].is<JsonArray>()) {
-      Serial.println("[UDP] ERROR: no mission stored yet");
+      debugln("[UDP] ERROR: no mission stored yet");
       sendUdpText("ERROR no_mission");
     } else if (!heartbeatFresh()) {
-      Serial.println("[UDP] ERROR: no fresh Pixhawk heartbeat yet");
+      debugln("[UDP] ERROR: no fresh Pixhawk heartbeat yet");
       sendUdpText("ERROR no_fresh_heartbeat");
     } else {
       currentStep = 0; stepStartTime = 0; lastWpSendTime = 0; stepHoldStartTime = 0;
@@ -965,20 +1057,20 @@ void handleMissionCommand(const String& msg) {
       missionAborted = false;
       lastAbortReason[0] = '\0';
       missionRunning = true;
-      Serial.println("[UDP] Mission START");
+      debugln("[UDP] Mission START");
       sendUdpText("OK START");
     }
   } else if (msg == "STOP") {
     abortMission("STOP command received");
     sendUdpText("OK STOP");
   } else if (msg == "STATUS") {
-    Serial.printf("[STATUS] step=%d running=%d gps=%d lat=%.6f lon=%.6f alt=%.2f armed=%d\n",
+    debugf("[STATUS] step=%d running=%d gps=%d lat=%.6f lon=%.6f alt=%.2f armed=%d\n",
                   currentStep, missionRunning, gps_valid,
                   current_lat, current_lon, current_alt, drone_armed);
     sendStatusReply();
   } else if (msg.startsWith("{")) {
     DeserializationError err = deserializeJson(missionDoc, msg);
-    Serial.println(err ? "[UDP] JSON parse FAILED" : "[UDP] Mission stored OK");
+    debugln(err ? "[UDP] JSON parse FAILED" : "[UDP] Mission stored OK");
     if (err) {
       sendUdpText("ERROR json_parse_failed");
     } else {
@@ -1010,6 +1102,7 @@ uint32_t lastHeartbeatTime = 0;
 uint32_t lastTelemetryRequestTime = 0;
 
 void setup() {
+  Serial.setTxBufferSize(2048);   // more headroom before debugf()/debugln() start dropping lines
   Serial.begin(115200);
   Serial2.begin(SERIAL_BAUD, SERIAL_8N1, RXD2, TXD2);
 
@@ -1019,10 +1112,11 @@ void setup() {
   WiFi.softAP(WIFI_SSID, WIFI_PASS);
   mavUdp.begin(MAVLINK_UDP_PORT);
   missionUdp.begin(MISSION_UDP_PORT);
+  logUdp.begin(LOGGER_UDP_PORT);
 
-  Serial.println("[ESP32] Ready");
-  Serial.printf("[ESP32] AP IP: %s  MAVLink UDP: %d  Mission UDP: %d\n",
-                WiFi.softAPIP().toString().c_str(), MAVLINK_UDP_PORT, MISSION_UDP_PORT);
+  debugln("[ESP32] Ready");
+  debugf("[ESP32] AP IP: %s  MAVLink UDP: %d  Mission UDP: %d  Logger UDP: %d\n",
+                WiFi.softAPIP().toString().c_str(), MAVLINK_UDP_PORT, MISSION_UDP_PORT, LOGGER_UDP_PORT);
 }
 
 void loop() {
