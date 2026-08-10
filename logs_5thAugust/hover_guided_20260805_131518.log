@@ -1,0 +1,30 @@
+[+   0.00s] ======================================================================
+[+   0.00s] Flight log: hover_guided
+[+   0.00s] Started: 2026-08-05T13:15:13
+[+   0.00s] Mission: {'steps': [{'action': 'arm'}, {'action': 'takeoff', 'alt': 1.5}, {'action': 'local_ned', 'x': 0, 'y': 0, 'z': 0, 'seconds': 5}, {'action': 'land'}]}
+[+   0.00s] ======================================================================
+[+   0.07s] [script] Mission uploaded and stored on ESP32
+[+   0.19s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   0.30s] SYS_STATUS battery=23.59V current=0.4A remaining=99% load=45.0%
+[+   0.38s] [script] Preflight ready
+[+   0.39s] GPS fix=4 sats=28 hdop=0.53 lat=28.5841651 lon=77.3513317 alt=196.01m
+[+   0.96s] DISARMED (mode=STABILIZE)
+[+   0.96s] Mode change -> STABILIZE
+[+   1.10s] POSITION lat=28.5841651 lon=77.3513317 relalt=1.32m hdg=306.5deg
+[+   2.88s] GPS fix=4 sats=28 hdop=0.53 lat=28.5841651 lon=77.3513319 alt=195.89m
+[+   2.95s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=-0.0m/s throttle=0%
+[+   3.29s] SYS_STATUS battery=23.59V current=0.4A remaining=99% load=44.4%
+[+   4.21s] [script] Operator confirmed START at prompt
+[+   4.22s] [script] START sent and acknowledged
+[+   4.24s] COMMAND_ACK command=176 result=ACCEPTED
+[+   4.25s] Mode change -> GUIDED
+[+   4.25s] COMMAND_ACK command=400 result=FAILED
+[+   4.26s] PIXHAWK MSG [CRITICAL] Arm: Throttle (RC3) is not neutral
+[+   4.28s] COMMAND_ACK command=21 result=ACCEPTED
+[+   4.29s] Mode change -> LAND
+[+   4.90s] EKF flags=0x033F
+[+   5.19s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   5.24s] [script] Mission aborted: ARM rejected by autopilot (Pixhawk: Arm: Throttle (RC3) is not neutral)
+[+   5.24s] ======================================================================
+[+   5.24s] Ended: 2026-08-05T13:15:18 (duration 5.2s)
+[+   5.24s] ======================================================================

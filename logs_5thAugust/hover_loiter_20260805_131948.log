@@ -1,0 +1,20 @@
+[+   0.00s] ======================================================================
+[+   0.00s] Flight log: hover_loiter
+[+   0.00s] Started: 2026-08-05T13:19:45
+[+   0.00s] Mission: {'steps': [{'action': 'arm'}, {'action': 'takeoff', 'alt': 1.5}, {'action': 'set_mode', 'mode': 'LOITER'}, {'action': 'wait', 'seconds': 5}, {'action': 'land'}]}
+[+   0.00s] ======================================================================
+[+   0.09s] COMMAND_ACK command=511 result=ACCEPTED
+[+   0.10s] GPS fix=3 sats=31 hdop=0.49 lat=28.5841833 lon=77.3513283 alt=193.64m
+[+   0.13s] EKF flags=0x033F
+[+   0.17s] POSITION lat=28.5841836 lon=77.3513285 relalt=0.39m hdg=169.8deg
+[+   0.50s] SYS_STATUS battery=23.37V current=0.4A remaining=96% load=49.3%
+[+   0.86s] VFR airspeed=0.1m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   1.61s] BATTERY remaining=96%
+[+   1.61s] landed_state=1
+[+   2.12s] VIBRATION x=0.02 y=0.02 z=0.04 clipping=(0,0,0)
+[+   2.14s] DISARMED (mode=LAND)
+[+   2.14s] Mode change -> LAND
+[+   3.07s] [script] Mission upload failed: no UDP reply
+[+   3.07s] ======================================================================
+[+   3.07s] Ended: 2026-08-05T13:19:48 (duration 3.1s)
+[+   3.07s] ======================================================================

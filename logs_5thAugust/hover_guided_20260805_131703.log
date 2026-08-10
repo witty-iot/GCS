@@ -1,0 +1,38 @@
+[+   0.00s] ======================================================================
+[+   0.00s] Flight log: hover_guided
+[+   0.00s] Started: 2026-08-05T13:16:58
+[+   0.00s] Mission: {'steps': [{'action': 'arm'}, {'action': 'takeoff', 'alt': 1.5}, {'action': 'local_ned', 'x': 0, 'y': 0, 'z': 0, 'seconds': 5}, {'action': 'land'}]}
+[+   0.00s] ======================================================================
+[+   0.13s] [script] Mission uploaded and stored on ESP32
+[+   0.13s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.1m/s throttle=0%
+[+   0.21s] POSITION lat=28.5841767 lon=77.3513236 relalt=0.51m hdg=306.0deg
+[+   0.27s] SYS_STATUS battery=23.59V current=0.4A remaining=99% load=44.8%
+[+   0.39s] landed_state=1
+[+   0.43s] [script] Preflight ready
+[+   0.85s] EKF flags=0x00A7
+[+   0.85s] VIBRATION x=0.02 y=0.02 z=0.03 clipping=(0,0,0)
+[+   0.87s] BATTERY remaining=99%
+[+   0.87s] landed_state=1
+[+   1.08s] PIXHAWK MSG [INFO] GPS 1: u-blox saving config
+[+   1.38s] landed_state=1
+[+   1.74s] PIXHAWK MSG [INFO] EKF3 IMU0 origin set
+[+   1.82s] PIXHAWK MSG [INFO] Field Elevation Set: 195m
+[+   1.86s] GPS fix=3 sats=28 hdop=0.53 lat=28.5841769 lon=77.3513242 alt=194.59m
+[+   2.21s] POSITION lat=28.5841770 lon=77.3513244 relalt=0.05m hdg=306.1deg
+[+   2.85s] landed_state=1
+[+   2.88s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   3.27s] SYS_STATUS battery=23.59V current=0.4A remaining=99% load=44.4%
+[+   3.38s] landed_state=1
+[+   3.38s] DISARMED (mode=STABILIZE)
+[+   3.38s] Mode change -> STABILIZE
+[+   4.01s] [script] Operator confirmed START at prompt
+[+   4.02s] [script] START sent and acknowledged
+[+   4.07s] PIXHAWK MSG [CRITICAL] Arm: GPS 1: not healthy
+[+   4.08s] COMMAND_ACK command=21 result=ACCEPTED
+[+   4.08s] Mode change -> LAND
+[+   4.35s] GPS fix=3 sats=29 hdop=0.52 lat=28.5841770 lon=77.3513247 alt=194.61m
+[+   4.41s] POSITION lat=28.5841769 lon=77.3513247 relalt=-0.12m hdg=306.0deg
+[+   5.04s] [script] Mission aborted: ARM rejected by autopilot (Pixhawk: Arm: GPS 1: not healthy)
+[+   5.04s] ======================================================================
+[+   5.04s] Ended: 2026-08-05T13:17:03 (duration 5.0s)
+[+   5.04s] ======================================================================

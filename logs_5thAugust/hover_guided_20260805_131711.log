@@ -1,0 +1,30 @@
+[+   0.00s] ======================================================================
+[+   0.00s] Flight log: hover_guided
+[+   0.00s] Started: 2026-08-05T13:17:07
+[+   0.00s] Mission: {'steps': [{'action': 'arm'}, {'action': 'takeoff', 'alt': 1.5}, {'action': 'local_ned', 'x': 0, 'y': 0, 'z': 0, 'seconds': 5}, {'action': 'land'}]}
+[+   0.00s] ======================================================================
+[+   0.07s] [script] Mission uploaded and stored on ESP32
+[+   0.39s] SYS_STATUS battery=23.58V current=0.3A remaining=99% load=52.8%
+[+   0.47s] [script] Preflight ready
+[+   0.50s] landed_state=1
+[+   0.82s] POSITION lat=28.5841746 lon=77.3513249 relalt=-0.11m hdg=306.0deg
+[+   1.48s] EKF flags=0x00A7
+[+   1.48s] VIBRATION x=0.02 y=0.02 z=0.04 clipping=(0,0,0)
+[+   2.00s] landed_state=1
+[+   2.00s] DISARMED (mode=LAND)
+[+   2.00s] Mode change -> LAND
+[+   2.02s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   2.46s] GPS fix=3 sats=29 hdop=0.52 lat=28.5841738 lon=77.3513250 alt=194.96m
+[+   2.49s] landed_state=1
+[+   2.84s] [script] Operator confirmed START at prompt
+[+   2.86s] [script] START sent and acknowledged
+[+   2.95s] COMMAND_ACK command=176 result=ACCEPTED
+[+   2.95s] Mode change -> GUIDED
+[+   2.98s] COMMAND_ACK command=400 result=FAILED
+[+   3.05s] Mode change -> LAND
+[+   3.05s] POSITION lat=28.5841736 lon=77.3513249 relalt=-0.10m hdg=305.9deg
+[+   4.00s] VIBRATION x=0.02 y=0.02 z=0.04 clipping=(0,0,0)
+[+   4.01s] [script] Mission aborted: ARM rejected by autopilot (Pixhawk: Arm: GPS 1: not healthy)
+[+   4.01s] ======================================================================
+[+   4.01s] Ended: 2026-08-05T13:17:11 (duration 4.0s)
+[+   4.01s] ======================================================================

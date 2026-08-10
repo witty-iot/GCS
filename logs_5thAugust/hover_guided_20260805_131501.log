@@ -1,0 +1,18 @@
+[+   0.00s] ======================================================================
+[+   0.00s] Flight log: hover_guided
+[+   0.00s] Started: 2026-08-05T13:14:58
+[+   0.00s] Mission: {'steps': [{'action': 'arm'}, {'action': 'takeoff', 'alt': 1.5}, {'action': 'local_ned', 'x': 0, 'y': 0, 'z': 0, 'seconds': 5}, {'action': 'land'}]}
+[+   0.00s] ======================================================================
+[+   0.09s] POSITION lat=28.5841657 lon=77.3513301 relalt=1.15m hdg=306.6deg
+[+   0.24s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   0.24s] DISARMED (mode=STABILIZE)
+[+   0.24s] Mode change -> STABILIZE
+[+   0.71s] VIBRATION x=0.02 y=0.02 z=0.03 clipping=(0,0,0)
+[+   1.09s] SYS_STATUS battery=23.58V current=0.3A remaining=99% load=45.9%
+[+   1.21s] landed_state=1
+[+   2.21s] landed_state=1
+[+   2.24s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   3.07s] [script] Mission upload failed: no UDP reply
+[+   3.07s] ======================================================================
+[+   3.07s] Ended: 2026-08-05T13:15:01 (duration 3.1s)
+[+   3.07s] ======================================================================

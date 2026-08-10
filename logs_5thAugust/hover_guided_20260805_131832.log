@@ -1,0 +1,77 @@
+[+   0.00s] ======================================================================
+[+   0.00s] Flight log: hover_guided
+[+   0.00s] Started: 2026-08-05T13:17:29
+[+   0.00s] Mission: {'steps': [{'action': 'arm'}, {'action': 'takeoff', 'alt': 1.5}, {'action': 'local_ned', 'x': 0, 'y': 0, 'z': 0, 'seconds': 5}, {'action': 'land'}]}
+[+   0.00s] ======================================================================
+[+   0.13s] [script] Mission uploaded and stored on ESP32
+[+   0.19s] COMMAND_ACK command=511 result=ACCEPTED
+[+   0.19s] COMMAND_ACK command=511 result=ACCEPTED
+[+   0.35s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   0.38s] POSITION lat=28.5841727 lon=77.3513233 relalt=0.03m hdg=306.0deg
+[+   0.38s] COMMAND_ACK command=512 result=ACCEPTED
+[+   0.44s] [script] Preflight ready
+[+   0.60s] VIBRATION x=0.02 y=0.02 z=0.04 clipping=(0,0,0)
+[+   0.98s] SYS_STATUS battery=23.57V current=0.3A remaining=99% load=53.2%
+[+   1.11s] BATTERY remaining=99%
+[+   1.11s] landed_state=1
+[+   1.56s] GPS fix=3 sats=30 hdop=0.50 lat=28.5841727 lon=77.3513232 alt=195.13m
+[+   3.07s] EKF flags=0x033F
+[+   3.11s] landed_state=1
+[+   3.19s] POSITION lat=28.5841725 lon=77.3513232 relalt=0.06m hdg=306.0deg
+[+   3.49s] SYS_STATUS battery=23.58V current=0.4A remaining=99% load=51.4%
+[+   3.56s] GPS fix=3 sats=29 hdop=0.51 lat=28.5841726 lon=77.3513232 alt=195.13m
+[+   3.60s] VIBRATION x=0.02 y=0.02 z=0.04 clipping=(0,0,0)
+[+   3.84s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   3.86s] [script] Operator confirmed START at prompt
+[+   3.86s] [script] START sent and acknowledged
+[+   3.89s] COMMAND_ACK command=176 result=ACCEPTED
+[+   3.90s] DISARMED (mode=GUIDED)
+[+   3.90s] Mode change -> GUIDED
+[+   3.90s] COMMAND_ACK command=400 result=ACCEPTED
+[+   4.12s] landed_state=1
+[+   4.65s] COMMAND_ACK command=176 result=ACCEPTED
+[+   4.66s] COMMAND_ACK command=400 result=ACCEPTED
+[+   4.66s] COMMAND_ACK command=22 result=ACCEPTED
+[+   4.88s] [script] Pixhawk accepted ARM
+[+   5.38s] POSITION lat=28.5841725 lon=77.3513233 relalt=0.02m hdg=306.0deg
+[+   5.84s] VFR airspeed=0.0m/s groundspeed=0.0m/s climb=0.0m/s throttle=0%
+[+   5.98s] SYS_STATUS battery=23.57V current=0.3A remaining=99% load=52.0%
+[+   7.09s] EKF flags=0x033F
+[+   8.06s] GPS fix=3 sats=30 hdop=0.50 lat=28.5841728 lon=77.3513237 alt=195.27m
+[+   8.18s] POSITION lat=28.5841728 lon=77.3513239 relalt=0.62m hdg=310.5deg
+[+   8.21s] COMMAND_ACK command=176 result=ACCEPTED
+[+   8.60s] BATTERY remaining=99%
+[+   9.13s] landed_state=2
+[+  10.50s] SYS_STATUS battery=22.54V current=11.4A remaining=99% load=53.1%
+[+  10.61s] VIBRATION x=1.62 y=10.15 z=15.81 clipping=(0,0,0)
+[+  11.57s] EKF flags=0x033F
+[+  11.62s] landed_state=2
+[+  16.11s] VIBRATION x=1.93 y=5.78 z=7.86 clipping=(0,0,0)
+[+  23.15s] VFR airspeed=0.9m/s groundspeed=0.1m/s climb=-0.9m/s throttle=42%
+[+  25.23s] COMMAND_ACK command=511 result=ACCEPTED
+[+  27.79s] POSITION lat=28.5841806 lon=77.3513263 relalt=9.03m hdg=267.4deg
+[+  28.20s] COMMAND_ACK command=21 result=ACCEPTED
+[+  33.21s] COMMAND_ACK command=21 result=ACCEPTED
+[+  38.01s] POSITION lat=28.5841813 lon=77.3513282 relalt=5.93m hdg=267.6deg
+[+  38.61s] EKF flags=0x033F
+[+  39.13s] VIBRATION x=1.95 y=6.34 z=14.35 clipping=(0,0,0)
+[+  40.49s] POSITION lat=28.5841805 lon=77.3513268 relalt=5.20m hdg=268.1deg
+[+  42.58s] EKF flags=0x033F
+[+  43.48s] POSITION lat=28.5841802 lon=77.3513269 relalt=4.32m hdg=269.9deg
+[+  43.63s] landed_state=4
+[+  44.50s] SYS_STATUS battery=22.36V current=10.5A remaining=97% load=51.8%
+[+  53.12s] landed_state=4
+[+  55.58s] EKF flags=0x033F
+[+  55.60s] VIBRATION x=2.45 y=7.65 z=12.81 clipping=(0,0,0)
+[+  57.09s] landed_state=4
+[+  57.11s] VFR airspeed=0.4m/s groundspeed=0.1m/s climb=-0.4m/s throttle=39%
+[+  58.49s] POSITION lat=28.5841796 lon=77.3513270 relalt=-0.18m hdg=254.8deg
+[+  60.57s] EKF flags=0x033F
+[+  61.48s] POSITION lat=28.5841780 lon=77.3513269 relalt=-0.42m hdg=180.9deg
+[+  61.49s] SYS_STATUS battery=23.08V current=1.1A remaining=96% load=52.7%
+[+  62.07s] GPS fix=3 sats=31 hdop=0.49 lat=28.5841802 lon=77.3513258 alt=193.52m
+[+  62.34s] VFR airspeed=0.4m/s groundspeed=0.4m/s climb=-0.1m/s throttle=0%
+[+  62.81s] [script] Mission completed
+[+  62.81s] ======================================================================
+[+  62.81s] Ended: 2026-08-05T13:18:32 (duration 62.8s)
+[+  62.81s] ======================================================================
