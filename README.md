@@ -382,35 +382,4 @@ the hook to build reactive swarm behavior on top of, deliberately kept
 simple rather than over-built before you know which reactions you
 actually need.
 
-## Bugs this SITL run actually caught (this is the point of testing before buying hardware)
 
-1. **`mavsdk` v4 is a breaking API change.** The installed-by-default
-   version replaced the old `System()` gRPC API with a different native
-   binding. `requirements.txt` now pins `mavsdk<4.0.0` — without this
-   pin, every `System()` call in `drone_agent.py` throws a `TypeError`
-   immediately.
-2. **Battery was reporting `9000%` instead of `90%`.** drone_brain's
-   original code did `remaining_percent * 100`, assuming a 0-1 fraction.
-   Live SITL telemetry showed `remaining_percent` is already 0-100.
-   Fixed in `flight/drone_agent.py`.
-3. **Two drones on one laptop silently cross-talked telemetry.** Every
-   `mavsdk.System()` spawns a local `mavsdk_server` on a fixed default
-   port (50051); running two `drone_node` processes without distinct
-   ports made the second one connect to the first drone's server,
-   reporting drone 1's GPS position as drone 2's. Fixed by adding
-   `mavsdk_server_port` to `drone_config.yaml` (see step 3b above). This
-   is a SITL-on-one-machine-only issue — doesn't exist with one real
-   Jetson per drone.
-
-None of these would have been obvious from reading the code — they only
-showed up by actually connecting to a running flight controller, which is
-exactly the value of doing this on SITL before buying a Jetson.
-
-## Known gap, called out on purpose
-
-Waypoint flying uses `goto_location()` + a Python polling loop (inherited
-from drone_brain), not MAVSDK's mission-upload API. This means the
-Pixhawk itself never holds the route — if the Jetson process dies
-mid-flight, the drone has no onboard fallback mission, just failsafes
-(RC loss, battery). Fine for short local test flights; worth revisiting
-before longer unattended missions.
