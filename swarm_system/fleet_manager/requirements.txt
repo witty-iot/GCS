@@ -1,0 +1,2 @@
+# fleet_manager — runs on your laptop. No MAVSDK needed; it never talks to a Pixhawk directly.
+paho-mqtt>=1.6.1,<2.0.0

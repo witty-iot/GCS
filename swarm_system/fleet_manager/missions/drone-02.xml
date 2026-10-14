@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Pushed to whichever Jetson the registry assigns drone_id="drone-02". -->
+<Mission id="SWARM-DEMO-001" name="Swarm Field Spray - Drone 02" version="1.0">
+
+  <Schedule>
+    <StartDate>2026-10-14T06:00:00</StartDate>
+    <TimeZone>Asia/Kolkata</TimeZone>
+  </Schedule>
+
+  <Fleet>
+    <Drone id="drone-02" name="Bravo">
+      <ConnectionString>serial:///dev/ttyTHS1:921600</ConnectionString>
+      <TakeoffAltitude>10</TakeoffAltitude>
+      <DefaultSpeed>5</DefaultSpeed>
+      <SpraySettings>
+        <GpioPin>19</GpioPin>
+        <PumpOnDelayMs>200</PumpOnDelayMs>
+        <PumpOffDelayMs>300</PumpOffDelayMs>
+      </SpraySettings>
+    </Drone>
+  </Fleet>
+
+  <Waypoints>
+    <Waypoint id="1" drone_id="drone-02">
+      <Lat>28.6150</Lat><Lon>77.2102</Lon><Alt>10</Alt>
+      <Action>spray_on</Action>
+      <LoiterSec>1</LoiterSec>
+      <Description>Bravo - spray on, entry edge of adjacent strip</Description>
+    </Waypoint>
+    <Waypoint id="2" drone_id="drone-02">
+      <Lat>28.6153</Lat><Lon>77.2105</Lon><Alt>10</Alt>
+      <Action>custom_code</Action>
+      <Description>Bravo - linear spray pattern</Description>
+      <CustomCode>
+        <Module>plugins/spray_pattern.py</Module>
+        <Function>execute_spray_pattern</Function>
+        <Args>
+          <Arg key="pattern">linear</Arg>
+          <Arg key="passes">2</Arg>
+        </Args>
+      </CustomCode>
+    </Waypoint>
+    <Waypoint id="3" drone_id="drone-02">
+      <Lat>28.6155</Lat><Lon>77.2108</Lon><Alt>10</Alt>
+      <Action>spray_off</Action>
+      <Description>Bravo - spray off, exit edge of adjacent strip</Description>
+    </Waypoint>
+  </Waypoints>
+
+  <Safety>
+    <MinBatteryPercent>20</MinBatteryPercent>
+    <MaxHdop>2.0</MaxHdop>
+    <HeartbeatTimeoutSec>5</HeartbeatTimeoutSec>
+    <GeofenceRadiusM>500</GeofenceRadiusM>
+  </Safety>
+
+  <RtlAfterMission>true</RtlAfterMission>
+</Mission>

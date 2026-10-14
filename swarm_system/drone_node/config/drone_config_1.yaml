@@ -1,0 +1,17 @@
+# Demo config for drone 1 (SITL instance -I 0, telemetry on 14540/14550).
+hardware_id: jetson-01
+
+broker:
+  host: localhost
+  port: 1883
+  connect_timeout_sec: 5
+  register_timeout_sec: 10
+
+drone:
+  connection_string: "udpin://0.0.0.0:14540"
+  # Must be unique per drone process running on this laptop (see
+  # drone_agent.py's mavsdk_server_port comment) — irrelevant once each
+  # drone has its own physical Jetson.
+  mavsdk_server_port: 50051
+
+fallback_mission: "../missions/standalone_mission.xml"

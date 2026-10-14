@@ -1,0 +1,32 @@
+# drone_config.yaml
+# ------------------
+# Per-Jetson local configuration. This file never travels over the network —
+# it's hardware-specific to the Jetson it lives on (which serial port, which
+# hardware_id). Copy this file once per physical drone and edit the two
+# values below.
+
+# Stable identifier for THIS piece of hardware. Pick anything unique
+# (a label you write on the drone works fine). fleet_manager maps this to
+# a drone_id and a mission on every registration.
+hardware_id: jetson-01
+
+broker:
+  host: 192.168.1.50      # IP of the laptop running fleet_manager.py
+  port: 1883
+  connect_timeout_sec: 5
+  register_timeout_sec: 10
+
+drone:
+  # Real hardware: serial link to the Pixhawk.
+  # SITL/dev: udpin://0.0.0.0:14540 (each SITL instance needs its own port).
+  connection_string: "serial:///dev/ttyTHS1:921600"
+  # Only matters if you ever run more than one drone_node process on the
+  # SAME machine (e.g. multiple SITL drones for a demo) — each mavsdk
+  # System() spawns a local server on a fixed port (50051) by default, so
+  # two processes on one host must use different ports or they cross-talk.
+  # One real Jetson per drone never hits this; leave as 50051.
+  mavsdk_server_port: 50051
+
+# Used only if the broker is unreachable or no fleet_manager answers in
+# time — lets a single drone fly standalone with no network at all.
+fallback_mission: "../missions/standalone_mission.xml"

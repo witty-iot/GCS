@@ -1,0 +1,9 @@
+# drone_node — runs on each Jetson
+# mavsdk v4+ replaced the old gRPC-based System() API with a native binding
+# (breaking change, different constructor/usage entirely). This codebase
+# uses the pre-v4 API, same as drone_brain before it — pin below 4.0.0.
+mavsdk>=1.4.0,<4.0.0
+apscheduler>=3.10.0
+pytz>=2024.1
+paho-mqtt>=1.6.1,<2.0.0
+PyYAML>=6.0

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  standalone_mission.xml
+
+  Used automatically when a drone_node can't reach fleet_manager (no
+  broker, no network, or just testing one drone by itself). Drone id
+  "jetson-01" matches the default hardware_id in config/drone_config.yaml:
+  in standalone mode the drone uses its own hardware_id as its drone_id.
+-->
+<Mission id="STANDALONE-001" name="Single Drone Standalone Spray" version="1.0">
+
+  <Schedule>
+    <StartDate>2026-10-14T06:00:00</StartDate>
+    <TimeZone>Asia/Kolkata</TimeZone>
+  </Schedule>
+
+  <Fleet>
+    <Drone id="jetson-01" name="Solo">
+      <ConnectionString>serial:///dev/ttyTHS1:921600</ConnectionString>
+      <TakeoffAltitude>10</TakeoffAltitude>
+      <DefaultSpeed>5</DefaultSpeed>
+      <SpraySettings>
+        <GpioPin>18</GpioPin>
+        <PumpOnDelayMs>200</PumpOnDelayMs>
+        <PumpOffDelayMs>300</PumpOffDelayMs>
+      </SpraySettings>
+    </Drone>
+  </Fleet>
+
+  <Waypoints>
+    <Waypoint id="1" drone_id="jetson-01">
+      <Lat>28.6142</Lat><Lon>77.2093</Lon><Alt>10</Alt>
+      <Action>spray_on</Action>
+      <LoiterSec>1</LoiterSec>
+      <Description>Spray on at field entry</Description>
+    </Waypoint>
+
+    <Waypoint id="2" drone_id="jetson-01">
+      <Lat>28.6146</Lat><Lon>77.2097</Lon><Alt>10</Alt>
+      <Action>custom_code</Action>
+      <Description>Zigzag spray pattern via plugin</Description>
+      <CustomCode>
+        <Module>plugins/spray_pattern.py</Module>
+        <Function>execute_spray_pattern</Function>
+        <Args>
+          <Arg key="pattern">zigzag</Arg>
+          <Arg key="passes">3</Arg>
+        </Args>
+      </CustomCode>
+    </Waypoint>
+
+    <Waypoint id="3" drone_id="jetson-01">
+      <Lat>28.6150</Lat><Lon>77.2101</Lon><Alt>10</Alt>
+      <Action>spray_off</Action>
+      <LoiterSec>0</LoiterSec>
+      <Description>Spray off at field exit</Description>
+    </Waypoint>
+  </Waypoints>
+
+  <Safety>
+    <MinBatteryPercent>20</MinBatteryPercent>
+    <MaxHdop>2.0</MaxHdop>
+    <HeartbeatTimeoutSec>5</HeartbeatTimeoutSec>
+    <GeofenceRadiusM>500</GeofenceRadiusM>
+  </Safety>
+
+  <RtlAfterMission>true</RtlAfterMission>
+</Mission>

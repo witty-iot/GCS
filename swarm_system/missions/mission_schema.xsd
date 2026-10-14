@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  mission_schema.xsd
+  ------------------
+  XML Schema Definition for multi-drone swarm mission files.
+  Validates the structure of mission XML files used by the drone_brain system.
+
+  Version: 1.0
+  Author: drone_brain system
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           elementFormDefault="qualified"
+           attributeFormDefault="unqualified">
+
+  <!-- =====================================================================
+       Root Element: Mission
+       ===================================================================== -->
+  <xs:element name="Mission">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Schedule"         type="ScheduleType"/>
+        <xs:element name="Fleet"            type="FleetType"/>
+        <xs:element name="Waypoints"        type="WaypointsType"/>
+        <xs:element name="Safety"           type="SafetyType"/>
+        <xs:element name="RtlAfterMission"  type="xs:boolean"/>
+      </xs:sequence>
+      <xs:attribute name="id"      type="xs:string"  use="required"/>
+      <xs:attribute name="name"    type="xs:string"  use="required"/>
+      <xs:attribute name="version" type="xs:string"  use="required"/>
+    </xs:complexType>
+  </xs:element>
+
+  <!-- =====================================================================
+       Schedule: defines when the mission starts and if it repeats
+       ===================================================================== -->
+  <xs:complexType name="ScheduleType">
+    <xs:sequence>
+      <!-- ISO 8601 datetime string e.g. 2026-10-14T06:00:00 -->
+      <xs:element name="StartDate"   type="xs:string"/>
+      <!-- IANA timezone name e.g. Asia/Kolkata -->
+      <xs:element name="TimeZone"    type="xs:string"/>
+      <!-- Optional cron expression for repeat e.g. "0 6 * * *" -->
+      <xs:element name="RepeatCron"  type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       Fleet: collection of drones participating in the mission
+       ===================================================================== -->
+  <xs:complexType name="FleetType">
+    <xs:sequence>
+      <xs:element name="Drone" type="DroneType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       Drone: configuration for a single drone
+       ===================================================================== -->
+  <xs:complexType name="DroneType">
+    <xs:sequence>
+      <!-- MAVSDK connection string e.g. serial:///dev/ttyTHS1:921600 or udp://:14541 -->
+      <xs:element name="ConnectionString"  type="xs:string"/>
+      <!-- Takeoff altitude in metres above ground level -->
+      <xs:element name="TakeoffAltitude"   type="xs:decimal"/>
+      <!-- Default cruise speed in m/s -->
+      <xs:element name="DefaultSpeed"      type="xs:decimal"/>
+      <!-- GPIO / spray hardware settings -->
+      <xs:element name="SpraySettings"     type="SpraySettingsType"/>
+    </xs:sequence>
+    <xs:attribute name="id"   type="xs:string" use="required"/>
+    <xs:attribute name="name" type="xs:string" use="required"/>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       SpraySettings: GPIO and pump timing for sprayer hardware
+       ===================================================================== -->
+  <xs:complexType name="SpraySettingsType">
+    <xs:sequence>
+      <!-- BCM GPIO pin number driving the relay/pump -->
+      <xs:element name="GpioPin"         type="xs:integer"/>
+      <!-- Delay in milliseconds after GPIO goes HIGH before spray starts -->
+      <xs:element name="PumpOnDelayMs"   type="xs:integer"/>
+      <!-- Delay in milliseconds after GPIO goes LOW before spray stops -->
+      <xs:element name="PumpOffDelayMs"  type="xs:integer"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       Waypoints: ordered list of waypoints for all drones
+       ===================================================================== -->
+  <xs:complexType name="WaypointsType">
+    <xs:sequence>
+      <xs:element name="Waypoint" type="WaypointType" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       Waypoint: a single geographic target with an associated action
+       ===================================================================== -->
+  <xs:complexType name="WaypointType">
+    <xs:sequence>
+      <xs:element name="Lat"         type="xs:decimal"/>
+      <xs:element name="Lon"         type="xs:decimal"/>
+      <!-- Altitude in metres (absolute or relative to home depending on firmware) -->
+      <xs:element name="Alt"         type="xs:decimal"/>
+      <!-- Action to perform upon reaching this waypoint -->
+      <xs:element name="Action"      type="WaypointActionEnum"/>
+      <!-- Optional: seconds to loiter/hover at this waypoint -->
+      <xs:element name="LoiterSec"   type="xs:decimal"  minOccurs="0" default="0"/>
+      <!-- Human-readable description for logging / GCS display -->
+      <xs:element name="Description" type="xs:string"   minOccurs="0" default=""/>
+      <!-- Present only when Action = custom_code -->
+      <xs:element name="CustomCode"  type="CustomCodeType" minOccurs="0"/>
+    </xs:sequence>
+    <!-- Unique integer identifier for this waypoint -->
+    <xs:attribute name="id"       type="xs:integer" use="required"/>
+    <!-- The drone_id this waypoint is assigned to -->
+    <xs:attribute name="drone_id" type="xs:string"  use="required"/>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       WaypointActionEnum: allowed action values at a waypoint
+       ===================================================================== -->
+  <xs:simpleType name="WaypointActionEnum">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="spray_on"/>
+      <xs:enumeration value="spray_off"/>
+      <xs:enumeration value="none"/>
+      <xs:enumeration value="custom_code"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <!-- =====================================================================
+       CustomCode: dynamic plugin invocation configuration
+       ===================================================================== -->
+  <xs:complexType name="CustomCodeType">
+    <xs:sequence>
+      <!-- Path to the Python module file relative to the project root -->
+      <xs:element name="Module"    type="xs:string"/>
+      <!-- Name of the async or sync function to call inside the module -->
+      <xs:element name="Function"  type="xs:string"/>
+      <!-- Zero or more key-value argument pairs passed as **kwargs -->
+      <xs:element name="Args"      type="ArgsType" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       Args: a collection of string key-value pairs for plugin arguments
+       ===================================================================== -->
+  <xs:complexType name="ArgsType">
+    <xs:sequence>
+      <xs:element name="Arg" type="ArgType" minOccurs="0" maxOccurs="unbounded"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ArgType">
+    <xs:simpleContent>
+      <xs:extension base="xs:string">
+        <xs:attribute name="key" type="xs:string" use="required"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+
+  <!-- =====================================================================
+       Safety: operational limits and failsafe thresholds
+       ===================================================================== -->
+  <xs:complexType name="SafetyType">
+    <xs:sequence>
+      <!-- RTL is triggered when battery falls below this percentage -->
+      <xs:element name="MinBatteryPercent"    type="xs:integer"/>
+      <!-- Maximum acceptable HDOP value; above this GPS is considered poor -->
+      <xs:element name="MaxHdop"              type="xs:decimal"/>
+      <!-- Seconds without MAVSDK heartbeat before declaring drone lost -->
+      <xs:element name="HeartbeatTimeoutSec"  type="xs:integer"/>
+      <!-- Maximum distance from home position before geofence triggers RTL -->
+      <xs:element name="GeofenceRadiusM"      type="xs:decimal"/>
+    </xs:sequence>
+  </xs:complexType>
+
+</xs:schema>
+

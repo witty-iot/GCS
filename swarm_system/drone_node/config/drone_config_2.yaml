@@ -1,0 +1,14 @@
+# Demo config for drone 2 (SITL instance -I 1, telemetry on 14541/14551).
+hardware_id: jetson-02
+
+broker:
+  host: localhost
+  port: 1883
+  connect_timeout_sec: 5
+  register_timeout_sec: 10
+
+drone:
+  connection_string: "udpin://0.0.0.0:14541"
+  mavsdk_server_port: 50052
+
+fallback_mission: "../missions/standalone_mission.xml"
