@@ -180,9 +180,17 @@ class DroneAgent:
         except ActionError as exc:
             log.warning("[%s] Could not set speed to %.1f m/s: %s", self.config.id, target_speed, exc)
 
+        # yaw_deg=NaN ("keep current heading") is rejected as UNSUPPORTED by
+        # this MAVSDK/mavsdk_server build — pass the vehicle's actual current
+        # heading instead, which has the same practical effect.
+        current_yaw = 0.0
+        async for heading in self._system.telemetry.heading():
+            current_yaw = heading.heading_deg
+            break
+
         await self._system.action.goto_location(
             latitude_deg=wp.lat, longitude_deg=wp.lon,
-            absolute_altitude_m=wp.alt, yaw_deg=float("nan"),
+            absolute_altitude_m=wp.alt, yaw_deg=current_yaw,
         )
 
         async for pos in self._system.telemetry.position():
@@ -214,7 +222,19 @@ class DroneAgent:
     # ------------------------------------------------------------------
 
     async def handle_actions(self, wp: Waypoint, runner: ActionRunner) -> None:
-        """Run every action attached to this waypoint, in XML order."""
+        """
+        Run every action attached to this waypoint.
+
+        ``wp.actions_mode == "sequential"`` (default): run one at a time,
+        in XML order — the next action only starts once the previous one
+        finishes.
+
+        ``wp.actions_mode == "parallel"``: launch all of this waypoint's
+        actions concurrently via ``asyncio.gather``. ``ActionRunner.run()``
+        already catches every plugin exception internally and returns
+        ``None`` on failure, so one action failing never prevents the
+        others from completing, in either mode.
+        """
         if not wp.actions:
             log.debug("[%s] WP %d has no actions; nothing to run.", self.config.id, wp.id)
             return
@@ -227,8 +247,16 @@ class DroneAgent:
             "swarm_state": self.swarm_state,
             **self._extra_context,  # local hardware controllers (e.g. "spray"), if any
         }
-        for action in wp.actions:
-            await runner.run(action, drone_context)
+
+        if wp.actions_mode == "parallel":
+            log.info(
+                "[%s] WP %d running %d action(s) in PARALLEL.",
+                self.config.id, wp.id, len(wp.actions),
+            )
+            await asyncio.gather(*(runner.run(action, drone_context) for action in wp.actions))
+        else:
+            for action in wp.actions:
+                await runner.run(action, drone_context)
 
     # ------------------------------------------------------------------
     # Telemetry publish loop (local bus + optional MQTT callback)

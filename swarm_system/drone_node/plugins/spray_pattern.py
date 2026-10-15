@@ -15,6 +15,13 @@ dict containing:
   - ``spray``        : SprayController, if this Jetson's local config
                        defines spray hardware (see spray_on.py/spray_off.py).
 
+``pattern``, ``passes``, ``pass_duration_sec`` and ``inter_pass_pause_sec``
+are no longer authored in the mission XML — they come from this plugin's
+sidecar ``plugins/spray_pattern.meta.json`` file, loaded by
+``core/action_runner.py``. Every waypoint that runs ``spray_pattern``
+anywhere, in any mission, gets the same params from that one file; there
+is no longer a per-waypoint/per-mission override.
+
 Supported patterns
 ------------------
 zigzag
@@ -43,33 +50,33 @@ from typing import Any, Dict
 
 log = logging.getLogger(__name__)
 
-# Simulated time per spray pass in seconds (represents drone travel time)
-_PASS_DURATION_SEC: float = 2.0
-# Brief pause between consecutive passes (pump flush / heading change)
-_INTER_PASS_PAUSE_SEC: float = 0.5
-
 
 async def run(
     drone_context: Dict[str, Any],
     pattern: str = "zigzag",
     passes: int = 3,
+    pass_duration_sec: float = 2.0,
+    inter_pass_pause_sec: float = 0.5,
 ) -> None:
     """
     Execute a configurable spray pattern for one waypoint segment.
 
-    This coroutine is called by ``ActionRunner.run()`` and receives
-    the drone's live context plus the keyword arguments declared in the
-    mission XML ``<Args>`` block.
+    This coroutine is called by ``ActionRunner.run()`` and receives the
+    drone's live context plus whatever keyword arguments this plugin's
+    own ``plugins/spray_pattern.meta.json`` sidecar file provides.
 
     Parameters
     ----------
-    drone_context : Runtime context injected by ``CustomCodeRunner``.
-                   Keys: ``drone_id``, ``position``, ``battery_pct``,
-                   ``mavsdk_system``.
-    pattern       : Name of the spray pattern to execute. One of:
-                   ``"zigzag"``, ``"linear"``, ``"figure8"``,
-                   ``"spiral"``. Defaults to ``"zigzag"``.
-    passes        : Number of passes (sweeps) to simulate. Must be >= 1.
+    drone_context        : Runtime context injected by ``ActionRunner``.
+                            Keys: ``drone_id``, ``position``,
+                            ``battery_pct``, ``mavsdk_system``.
+    pattern               : Name of the spray pattern to execute. One of:
+                            ``"zigzag"``, ``"linear"``, ``"figure8"``,
+                            ``"spiral"``. Defaults to ``"zigzag"``.
+    passes                : Number of passes (sweeps) to simulate. Must be >= 1.
+    pass_duration_sec     : Simulated time per spray pass (drone travel time).
+    inter_pass_pause_sec  : Brief pause between consecutive passes (pump
+                            flush / heading change).
 
     Returns
     -------
@@ -116,7 +123,7 @@ async def run(
                 "[%s] Zigzag pass %d/%d  direction=%s  spraying …",
                 drone_id, pass_num, passes, direction,
             )
-            await asyncio.sleep(_PASS_DURATION_SEC)
+            await asyncio.sleep(pass_duration_sec)
             log.info(
                 "[%s] Zigzag pass %d/%d complete. Reversing heading.",
                 drone_id, pass_num, passes,
@@ -127,7 +134,7 @@ async def run(
                 "[%s] Linear pass %d/%d  direction=→  spraying …",
                 drone_id, pass_num, passes,
             )
-            await asyncio.sleep(_PASS_DURATION_SEC)
+            await asyncio.sleep(pass_duration_sec)
             log.info(
                 "[%s] Linear pass %d/%d complete. Repositioning for next strip.",
                 drone_id, pass_num, passes,
@@ -138,12 +145,12 @@ async def run(
                 "[%s] Figure-8 loop %d/%d  spraying left lobe …",
                 drone_id, pass_num, passes,
             )
-            await asyncio.sleep(_PASS_DURATION_SEC)
+            await asyncio.sleep(pass_duration_sec)
             log.info(
                 "[%s] Figure-8 loop %d/%d  spraying right lobe …",
                 drone_id, pass_num, passes,
             )
-            await asyncio.sleep(_PASS_DURATION_SEC)
+            await asyncio.sleep(pass_duration_sec)
             log.info(
                 "[%s] Figure-8 loop %d/%d complete.",
                 drone_id, pass_num, passes,
@@ -155,7 +162,7 @@ async def run(
                 "[%s] Spiral pass %d/%d  radius=%.1f m  spraying …",
                 drone_id, pass_num, passes, radius_m,
             )
-            await asyncio.sleep(_PASS_DURATION_SEC * 1.5)
+            await asyncio.sleep(pass_duration_sec * 1.5)
             log.info(
                 "[%s] Spiral pass %d/%d complete.",
                 drone_id, pass_num, passes,
@@ -166,11 +173,11 @@ async def run(
                 "[%s] Unknown spray pattern '%s'. Executing fallback linear pass %d/%d.",
                 drone_id, pattern, pass_num, passes,
             )
-            await asyncio.sleep(_PASS_DURATION_SEC)
+            await asyncio.sleep(pass_duration_sec)
 
         # Pause between passes (except after the last one)
         if pass_num < passes:
-            await asyncio.sleep(_INTER_PASS_PAUSE_SEC)
+            await asyncio.sleep(inter_pass_pause_sec)
 
     log.info(
         "[%s] execute_spray_pattern finished: pattern='%s' passes=%d.",

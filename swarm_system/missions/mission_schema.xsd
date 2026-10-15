@@ -4,23 +4,31 @@
   ------------------
   XML Schema Definition for multi-drone swarm mission files.
 
-  Version: 2.0
+  Version: 2.1
   v2 changes from v1:
     - Waypoints now nest inside their owning <Drone>, not a flat sibling
       list cross-referenced by a drone_id attribute.
-    - <Action> is fully generic: a "code" attribute + optional <Arg>
-      children, resolved to a plugin at runtime. There is no longer a
-      fixed enum of built-in actions (no more spray_on/spray_off special
-      cased in the schema) — spraying is just one plugin among any
-      number of others (take_photo, drop_payload, whatever you write).
-    - A waypoint may have more than one <Action> — they run in the order
-      written (e.g. spray_on and take_photo at the same point).
+    - <Action> is fully generic: just a "code" attribute, resolved to a
+      plugin at runtime. There is no longer a fixed enum of built-in
+      actions (no more spray_on/spray_off special cased in the schema) —
+      spraying is just one plugin among any number of others (take_photo,
+      drop_payload, whatever you write).
     - <ConnectionString> and <SpraySettings> are removed from <Drone>
       entirely. Hardware wiring (serial port, GPIO pins) is never
       mission data — it's local-only config on each Jetson, never
       transmitted over the network.
     - Waypoints may carry an optional per-waypoint <Speed>, overriding
       the drone's DefaultSpeed for that leg.
+  v2.1 changes from v2.0 (per CEO review):
+    - Action parameters are no longer authored in the mission XML at all
+      (<Arg> is removed from <ActionType>). Each action's parameters now
+      live in a sidecar plugins/<code>.meta.json file next to its plugin
+      code — the mission just names which action to run, not how it's
+      tuned. See core/action_runner.py.
+    - A waypoint's actions are now wrapped in an explicit <Actions> element
+      (instead of bare repeated <Action> siblings), with a "mode"
+      attribute: "sequential" (default, run one at a time, in order) or
+      "parallel" (launch all of this waypoint's actions concurrently).
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            elementFormDefault="qualified"
@@ -105,8 +113,8 @@
       <xs:element name="Alt"         type="xs:decimal"/>
       <!-- Optional: cruise speed for this leg, overrides the drone's DefaultSpeed -->
       <xs:element name="Speed"       type="xs:decimal"  minOccurs="0"/>
-      <!-- Optional: action to perform upon reaching this waypoint -->
-      <xs:element name="Action"      type="ActionType"  minOccurs="0" maxOccurs="unbounded"/>
+      <!-- Optional: one or more actions to perform upon reaching this waypoint -->
+      <xs:element name="Actions"     type="ActionsType" minOccurs="0"/>
       <!-- Optional: seconds to loiter/hover at this waypoint -->
       <xs:element name="LoiterSec"   type="xs:decimal"  minOccurs="0" default="0"/>
       <!-- Human-readable description for logging / GCS display -->
@@ -117,26 +125,35 @@
   </xs:complexType>
 
   <!-- =====================================================================
-       Action: a generic action code resolved to a plugin at runtime
-       (plugins/<code>.py, function run()) plus optional arguments.
-       No fixed enum — any code is valid, as long as a matching plugin
-       file exists.
+       Actions: one or more actions attached to a waypoint, with a mode
+       controlling how they run relative to each other.
        ===================================================================== -->
-  <xs:complexType name="ActionType">
+  <xs:complexType name="ActionsType">
     <xs:sequence>
-      <!-- Zero or more key-value argument pairs passed to the plugin's run() -->
-      <xs:element name="Arg" type="ArgType" minOccurs="0" maxOccurs="unbounded"/>
+      <xs:element name="Action" type="ActionType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
-    <!-- Action identifier, e.g. "spray_on", "take_photo", "spray_pattern" -->
-    <xs:attribute name="code" type="xs:string" use="required"/>
+    <!-- "sequential" (default): run one at a time, in document order.
+         "parallel": launch all of this waypoint's actions concurrently. -->
+    <xs:attribute name="mode" default="sequential">
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:enumeration value="sequential"/>
+          <xs:enumeration value="parallel"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
   </xs:complexType>
 
-  <xs:complexType name="ArgType">
-    <xs:simpleContent>
-      <xs:extension base="xs:string">
-        <xs:attribute name="key" type="xs:string" use="required"/>
-      </xs:extension>
-    </xs:simpleContent>
+  <!-- =====================================================================
+       Action: a generic action code resolved to a plugin at runtime
+       (plugins/<code>.py, function run()). No fixed enum — any code is
+       valid, as long as a matching plugin file exists. Parameters are NOT
+       authored here — they live in plugins/<code>.meta.json, a sidecar
+       file next to the plugin's own code (see core/action_runner.py).
+       ===================================================================== -->
+  <xs:complexType name="ActionType">
+    <!-- Action identifier, e.g. "spray_on", "take_photo", "spray_pattern" -->
+    <xs:attribute name="code" type="xs:string" use="required"/>
   </xs:complexType>
 
   <!-- =====================================================================

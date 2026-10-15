@@ -1,0 +1,6 @@
+{
+  "pattern": "zigzag",
+  "passes": 3,
+  "pass_duration_sec": 2.0,
+  "inter_pass_pause_sec": 0.5
+}

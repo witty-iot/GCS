@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from core.mission_plan import (
     ActionConfig,
@@ -280,10 +280,20 @@ class MissionParser:
 
             description = _find_text(wp_elem, "Description", "")
 
-            actions = [
-                MissionParser._parse_action(action_elem, ctx)
-                for action_elem in wp_elem.findall("Action")
-            ]
+            actions: List[ActionConfig] = []
+            actions_mode = "sequential"
+            actions_elem = wp_elem.find("Actions")
+            if actions_elem is not None:
+                actions_mode = (actions_elem.get("mode") or "sequential").strip().lower()
+                if actions_mode not in ("sequential", "parallel"):
+                    raise MissionParseError(
+                        f"<Actions mode=\"{actions_mode}\"> inside {ctx} must be "
+                        f"'sequential' or 'parallel'."
+                    )
+                actions = [
+                    MissionParser._parse_action(action_elem, ctx)
+                    for action_elem in actions_elem.findall("Action")
+                ]
 
             wp = Waypoint(
                 id=wp_id,
@@ -291,13 +301,14 @@ class MissionParser:
                 lon=lon,
                 alt=alt,
                 actions=actions,
+                actions_mode=actions_mode,
                 speed=speed,
                 loiter_sec=loiter_sec,
                 description=description,
             )
             log.debug(
-                "Parsed %s: lat=%.6f lon=%.6f actions=%s",
-                ctx, lat, lon, [a.code for a in actions] or "none",
+                "Parsed %s: lat=%.6f lon=%.6f actions=%s mode=%s",
+                ctx, lat, lon, [a.code for a in actions] or "none", actions_mode,
             )
             waypoints.append(wp)
 
@@ -306,30 +317,17 @@ class MissionParser:
     @staticmethod
     def _parse_action(elem: ET.Element, ctx: str) -> ActionConfig:
         """
-        Parse a generic ``<Action code="...">`` element with optional
-        ``<Arg>`` children. There is no fixed set of valid codes — any
-        string is resolved to a plugin at runtime by convention
-        (``plugins/<code>.py``).
+        Parse a generic ``<Action code="...">`` element. There is no fixed
+        set of valid codes — any string is resolved to a plugin at runtime
+        by convention (``plugins/<code>.py``). Parameters are not read
+        here; they live in that plugin's own ``plugins/<code>.meta.json``
+        sidecar file (see ``core/action_runner.py``).
         """
         code = (elem.get("code") or "").strip()
         if not code:
             raise MissionParseError(f"<Action> inside {ctx} is missing required attribute 'code'.")
 
-        args: Dict[str, Any] = {}
-        for arg in elem.findall("Arg"):
-            key = arg.get("key") or ""
-            value: Any = (arg.text or "").strip()
-            if not key:
-                raise MissionParseError(f"<Arg> inside {ctx}/Action is missing 'key' attribute.")
-            for converter in (int, float):
-                try:
-                    value = converter(value)
-                    break
-                except ValueError:
-                    pass
-            args[key] = value
-
-        return ActionConfig(code=code, args=args)
+        return ActionConfig(code=code)
 
     @staticmethod
     def _parse_safety(elem: ET.Element) -> SafetyConfig:

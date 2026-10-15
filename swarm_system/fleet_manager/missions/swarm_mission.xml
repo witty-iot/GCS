@@ -12,10 +12,14 @@
   edit one drone's plan independently without this file's presence
   forcing the shared-file model.
 
-  WP3 on drone-02 has TWO actions (take_photo + spray_off) to demonstrate
-  multi-action waypoints.
+  WP3 on drone-02 has TWO actions (take_photo + spray_off), run with
+  mode="parallel" to demonstrate concurrent action execution.
+
+  v2.1: action params (e.g. spray_pattern's "pattern"/"passes") live in
+  plugins/<code>.meta.json, not here. A waypoint's actions are wrapped in
+  <Actions mode="sequential|parallel">.
 -->
-<Mission id="SWARM-DEMO-001" name="Swarm Field Spray" version="2.0">
+<Mission id="SWARM-DEMO-001" name="Swarm Field Spray" version="2.1">
 
   <Schedule>
     <StartDate>2026-10-14T06:00:00</StartDate>
@@ -31,23 +35,26 @@
       <Waypoints>
         <Waypoint id="1">
           <Lat>28.6142</Lat><Lon>77.2093</Lon><Alt>10</Alt>
-          <Action code="spray_on"/>
+          <Actions>
+            <Action code="spray_on"/>
+          </Actions>
           <LoiterSec>1</LoiterSec>
           <Description>Alpha - spray on, entry edge of field A</Description>
         </Waypoint>
 
         <Waypoint id="2">
           <Lat>28.6146</Lat><Lon>77.2097</Lon><Alt>10</Alt>
-          <Action code="spray_pattern">
-            <Arg key="pattern">zigzag</Arg>
-            <Arg key="passes">3</Arg>
-          </Action>
-          <Description>Alpha - zigzag spray pattern</Description>
+          <Actions>
+            <Action code="spray_pattern"/>
+          </Actions>
+          <Description>Alpha - spray pattern (params from plugins/spray_pattern.meta.json)</Description>
         </Waypoint>
 
         <Waypoint id="3">
           <Lat>28.6150</Lat><Lon>77.2101</Lon><Alt>10</Alt>
-          <Action code="spray_off"/>
+          <Actions>
+            <Action code="spray_off"/>
+          </Actions>
           <Description>Alpha - spray off, exit edge of field A</Description>
         </Waypoint>
       </Waypoints>
@@ -60,26 +67,29 @@
       <Waypoints>
         <Waypoint id="1">
           <Lat>28.6150</Lat><Lon>77.2102</Lon><Alt>10</Alt>
-          <Action code="spray_on"/>
+          <Actions>
+            <Action code="spray_on"/>
+          </Actions>
           <LoiterSec>1</LoiterSec>
           <Description>Bravo - spray on, entry edge of adjacent strip</Description>
         </Waypoint>
 
         <Waypoint id="2">
           <Lat>28.6153</Lat><Lon>77.2105</Lon><Alt>10</Alt>
-          <Action code="spray_pattern">
-            <Arg key="pattern">linear</Arg>
-            <Arg key="passes">2</Arg>
-          </Action>
-          <Description>Bravo - linear spray pattern</Description>
+          <Actions>
+            <Action code="spray_pattern"/>
+          </Actions>
+          <Description>Bravo - spray pattern (params from plugins/spray_pattern.meta.json)</Description>
         </Waypoint>
 
         <Waypoint id="3">
           <Lat>28.6155</Lat><Lon>77.2108</Lon><Alt>15</Alt>
           <Speed>2</Speed>
-          <Action code="take_photo"/>
-          <Action code="spray_off"/>
-          <Description>Bravo - climb, photograph the strip, and stop spraying - two actions at one waypoint</Description>
+          <Actions mode="parallel">
+            <Action code="take_photo"/>
+            <Action code="spray_off"/>
+          </Actions>
+          <Description>Bravo - climb, photograph the strip, and stop spraying - two independent actions run in parallel</Description>
         </Waypoint>
       </Waypoints>
     </Drone>

@@ -10,16 +10,23 @@ plugin, same as everything else.
 
 Convention
 ----------
-An ``ActionConfig`` has a ``code`` (e.g. "spray_on", "take_photo") and
-``args`` (from the mission XML's ``<Arg>`` elements). The action code maps
-directly to a plugin file by naming convention:
+An ``ActionConfig`` has only a ``code`` (e.g. "spray_on", "take_photo") —
+the mission XML names the action, nothing more. The action code maps
+directly to a plugin file by naming convention, and its parameters (if
+any) come from a sidecar metadata file next to that plugin, not from the
+mission:
 
-    code "spray_on"  ->  plugins/spray_on.py, function run()
-    code "take_photo" -> plugins/take_photo.py, function run()
+    code "spray_on"     ->  plugins/spray_on.py, function run()
+    code "take_photo"   ->  plugins/take_photo.py, function run()
+    code "spray_pattern"->  plugins/spray_pattern.py, function run()
+                             params from plugins/spray_pattern.meta.json
+
+A plugin with no meta.json file simply gets called with no extra kwargs
+(fine for plugins like spray_on/spray_off/take_photo that take none).
 
 Every plugin must define a callable named ``run`` (sync or async) that
-accepts ``drone_context`` as a keyword argument, plus whatever kwargs the
-mission's ``<Arg>`` elements provide.
+accepts ``drone_context`` as a keyword argument, plus whatever kwargs its
+own meta.json file provides.
 
 Design goals (unchanged from before)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -41,6 +48,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import inspect
+import json
 import logging
 import types
 from pathlib import Path
@@ -52,6 +60,7 @@ log = logging.getLogger(__name__)
 
 PLUGIN_FUNCTION_NAME = "run"
 PLUGINS_DIR = "plugins"
+META_SUFFIX = ".meta.json"
 
 
 # ---------------------------------------------------------------------------
@@ -75,12 +84,15 @@ class ActionRunner:
 
     Attributes
     ----------
-    _cache : Mapping from action code to the resolved callable. Populated
-             lazily on first use of that code.
+    _cache      : Mapping from action code to the resolved callable.
+                  Populated lazily on first use of that code.
+    _meta_cache : Mapping from action code to its loaded meta.json params
+                  (``{}`` if the action has no sidecar file).
     """
 
     def __init__(self) -> None:
         self._cache: Dict[str, Callable[..., Any]] = {}
+        self._meta_cache: Dict[str, Dict[str, Any]] = {}
         log.debug("ActionRunner initialised.")
 
     # ------------------------------------------------------------------
@@ -136,6 +148,33 @@ class ActionRunner:
         log.debug("Plugin loaded and cached for action '%s'.", action_code)
         return fn
 
+    def load_meta(self, action_code: str) -> Dict[str, Any]:
+        """
+        Load *action_code*'s parameters from its sidecar
+        ``plugins/<action_code>.meta.json`` file, if one exists. Missing
+        file -> ``{}`` (plenty of plugins, e.g. spray_on/spray_off/
+        take_photo, take no parameters at all). Cached after first load.
+        """
+        if action_code in self._meta_cache:
+            return self._meta_cache[action_code]
+
+        meta_path = Path(PLUGINS_DIR) / f"{action_code}{META_SUFFIX}"
+        meta: Dict[str, Any] = {}
+        if meta_path.exists():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            except Exception as exc:
+                log.warning(
+                    "Malformed meta file %s for action '%s' (%s); using no params.",
+                    meta_path, action_code, exc,
+                )
+                meta = {}
+            else:
+                log.debug("Loaded meta params for action '%s': %s", action_code, meta)
+
+        self._meta_cache[action_code] = meta
+        return meta
+
     async def run(
         self,
         action: ActionConfig,
@@ -153,19 +192,20 @@ class ActionRunner:
             log.error("Failed to resolve action '%s': %s", action.code, exc)
             return None
 
+        meta_params = self.load_meta(action.code)
         log.info(
-            "Running action '%s' args=%s drone_id=%s",
-            action.code, action.args, drone_context.get("drone_id", "?"),
+            "Running action '%s' params=%s drone_id=%s",
+            action.code, meta_params, drone_context.get("drone_id", "?"),
         )
 
         try:
             if inspect.iscoroutinefunction(fn):
-                result = await fn(**action.args, drone_context=drone_context)
+                result = await fn(**meta_params, drone_context=drone_context)
             else:
                 loop = asyncio.get_event_loop()
                 result = await loop.run_in_executor(
                     None,
-                    lambda: fn(**action.args, drone_context=drone_context),
+                    lambda: fn(**meta_params, drone_context=drone_context),
                 )
             log.debug("Action '%s' completed. result=%s", action.code, result)
             return result
@@ -178,4 +218,5 @@ class ActionRunner:
 
     def clear_cache(self) -> None:
         self._cache.clear()
-        log.debug("Plugin cache cleared.")
+        self._meta_cache.clear()
+        log.debug("Plugin and meta cache cleared.")

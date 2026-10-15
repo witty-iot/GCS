@@ -11,8 +11,12 @@
   a generic code resolved to plugins/<code>.py at runtime - no built-in
   action types. Hardware wiring (GPIO pin, pump timing) is NOT here; it
   lives in this Jetson's local drone_config.yaml under "hardware.spray".
+
+  v2.1: action parameters (e.g. spray_pattern's "pattern"/"passes") are no
+  longer authored here - see plugins/spray_pattern.meta.json. A waypoint's
+  actions are wrapped in <Actions mode="sequential|parallel">.
 -->
-<Mission id="STANDALONE-001" name="Single Drone Standalone Spray" version="2.0">
+<Mission id="STANDALONE-001" name="Single Drone Standalone Spray" version="2.1">
 
   <Schedule>
     <StartDate>2026-10-14T06:00:00</StartDate>
@@ -27,7 +31,9 @@
       <Waypoints>
         <Waypoint id="1">
           <Lat>28.6142</Lat><Lon>77.2093</Lon><Alt>10</Alt>
-          <Action code="spray_on"/>
+          <Actions>
+            <Action code="spray_on"/>
+          </Actions>
           <LoiterSec>1</LoiterSec>
           <Description>Spray on at field entry</Description>
         </Waypoint>
@@ -35,16 +41,17 @@
         <Waypoint id="2">
           <Lat>28.6146</Lat><Lon>77.2097</Lon><Alt>10</Alt>
           <Speed>3</Speed>
-          <Action code="spray_pattern">
-            <Arg key="pattern">zigzag</Arg>
-            <Arg key="passes">3</Arg>
-          </Action>
-          <Description>Zigzag spray pattern via plugin, slower pass</Description>
+          <Actions>
+            <Action code="spray_pattern"/>
+          </Actions>
+          <Description>Spray pattern via plugin (params from plugins/spray_pattern.meta.json), slower pass</Description>
         </Waypoint>
 
         <Waypoint id="3">
           <Lat>28.6150</Lat><Lon>77.2101</Lon><Alt>10</Alt>
-          <Action code="spray_off"/>
+          <Actions>
+            <Action code="spray_off"/>
+          </Actions>
           <Description>Spray off at field exit</Description>
         </Waypoint>
       </Waypoints>

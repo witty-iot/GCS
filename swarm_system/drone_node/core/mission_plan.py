@@ -22,8 +22,10 @@ v2 schema changes (vs. v1)
 
 Classes
 -------
-ActionConfig   : An action code + arguments to resolve and run at a waypoint.
-Waypoint       : A single geographic target with metadata and an action.
+ActionConfig   : An action code to resolve and run at a waypoint; its
+                 parameters live in a plugins/<code>.meta.json sidecar
+                 file, not in the mission itself.
+Waypoint       : A single geographic target with metadata and its actions.
 DroneConfig    : One drone's mission-relevant config (altitude, speed, waypoints).
 SafetyConfig   : Operational limits and failsafe thresholds.
 ScheduleConfig : Mission start-time and optional repeat schedule.
@@ -33,7 +35,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -50,11 +52,12 @@ class ActionConfig:
     code : Short identifier (e.g. "spray_on", "take_photo", "spray_pattern").
            Resolved by convention to ``plugins/<code>.py``'s ``run()``
            function — no action is special-cased anywhere in the system.
-    args : Keyword arguments forwarded to the plugin's ``run()`` call.
+           Parameters are NOT carried here — they live in that plugin's
+           own ``plugins/<code>.meta.json`` sidecar file, loaded by
+           ``core/action_runner.py``. The mission only names the action.
     """
 
     code: str
-    args: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -69,22 +72,25 @@ class Waypoint:
     lat         : Latitude in decimal degrees (WGS-84).
     lon         : Longitude in decimal degrees (WGS-84).
     alt         : Altitude in metres (interpretation depends on firmware mode).
-    actions     : Actions to run on arrival, in XML order. Empty list means
-                  "just fly here, do nothing."
-    speed       : Optional per-waypoint cruise speed (m/s). Falls back to
-                  the drone's default_speed_ms when not set.
-    loiter_sec  : Seconds to hover at the waypoint before proceeding.
-    description : Free-text description for GCS display / logging.
+    actions      : Actions to run on arrival, in XML order. Empty list means
+                   "just fly here, do nothing."
+    actions_mode : "sequential" (default, run one at a time, in order) or
+                   "parallel" (launch all of this waypoint's actions at once).
+    speed        : Optional per-waypoint cruise speed (m/s). Falls back to
+                   the drone's default_speed_ms when not set.
+    loiter_sec   : Seconds to hover at the waypoint before proceeding.
+    description  : Free-text description for GCS display / logging.
     """
 
-    id:          int
-    lat:         float
-    lon:         float
-    alt:         float
-    actions:     List[ActionConfig] = field(default_factory=list)
-    speed:       Optional[float]    = None
-    loiter_sec:  float              = 0.0
-    description: str                = ""
+    id:           int
+    lat:          float
+    lon:          float
+    alt:          float
+    actions:      List[ActionConfig] = field(default_factory=list)
+    actions_mode: str                = "sequential"
+    speed:        Optional[float]    = None
+    loiter_sec:   float              = 0.0
+    description:  str                = ""
 
 
 @dataclass

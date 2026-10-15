@@ -1,0 +1,572 @@
+14:45:51 INFO    main                 Loaded config: hardware_id=jetson-02
+14:45:51 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+14:45:51 INFO    swarm.mqtt_link      SwarmLink: registration request sent (hardware_id=jetson-02).
+14:45:51 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+14:45:51 INFO    swarm.mqtt_link      SwarmLink: registered as drone_id=drone-01.
+14:45:51 INFO    main                 Received mission from fleet_manager for drone_id=drone-01 -> cached at missions_cache\drone-01.xml
+14:45:51 INFO    core.mission_parser  Parsing mission file: missions_cache\drone-01.xml
+14:45:51 DEBUG   core.mission_parser  Mission id=SWARM-DEMO-001 name=Swarm Field Spray version=2.0
+14:45:51 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+14:45:51 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+14:45:51 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+14:45:51 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+14:45:51 DEBUG   core.mission_parser  Parsed drone: Alpha (drone-01), 3 waypoint(s)
+14:45:51 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[1]: lat=28.615000 lon=77.210200 actions=['spray_on']
+14:45:51 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[2]: lat=28.615300 lon=77.210500 actions=['spray_pattern']
+14:45:51 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[3]: lat=28.615500 lon=77.210800 actions=['take_photo', 'spray_off']
+14:45:51 DEBUG   core.mission_parser  Parsed drone: Bravo (drone-02), 3 waypoint(s)
+14:45:51 INFO    core.mission_parser  Mission 'Swarm Field Spray' parsed successfully: 2 drone(s), 6 waypoint(s) total.
+14:45:51 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+14:45:51 DEBUG   core.action_runner   ActionRunner initialised.
+14:45:51 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+14:45:51 INFO    main                 Local hardware: spray controller configured on GPIO 19.
+14:45:51 INFO    flight.drone_agent   DroneAgent initialised for 'Alpha' (drone-01).
+14:45:51 INFO    main                 Ready: drone_id=drone-01 mission='Swarm Field Spray' waypoints=3 peers_visible=0
+14:45:51 INFO    flight.drone_agent   [drone-01] Starting mission: 3 waypoints.
+14:45:51 INFO    flight.drone_agent   [drone-01] Connecting to udpin://0.0.0.0:14541 (mavsdk_server port 50052) ...
+14:45:52 INFO    main                 Loaded config: hardware_id=jetson-01
+14:45:52 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+14:45:52 INFO    swarm.mqtt_link      SwarmLink: registration request sent (hardware_id=jetson-01).
+14:45:52 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+14:45:52 INFO    swarm.mqtt_link      SwarmLink: registered as drone_id=drone-02.
+14:45:52 INFO    main                 Received mission from fleet_manager for drone_id=drone-02 -> cached at missions_cache\drone-02.xml
+14:45:52 INFO    core.mission_parser  Parsing mission file: missions_cache\drone-02.xml
+14:45:52 DEBUG   core.mission_parser  Mission id=SWARM-DEMO-001 name=Swarm Field Spray version=2.0
+14:45:52 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+14:45:52 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+14:45:52 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+14:45:52 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+14:45:52 DEBUG   core.mission_parser  Parsed drone: Alpha (drone-01), 3 waypoint(s)
+14:45:52 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[1]: lat=28.615000 lon=77.210200 actions=['spray_on']
+14:45:52 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[2]: lat=28.615300 lon=77.210500 actions=['spray_pattern']
+14:45:52 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[3]: lat=28.615500 lon=77.210800 actions=['take_photo', 'spray_off']
+14:45:52 DEBUG   core.mission_parser  Parsed drone: Bravo (drone-02), 3 waypoint(s)
+14:45:52 INFO    core.mission_parser  Mission 'Swarm Field Spray' parsed successfully: 2 drone(s), 6 waypoint(s) total.
+14:45:52 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+14:45:52 DEBUG   core.action_runner   ActionRunner initialised.
+14:45:52 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+14:45:52 INFO    main                 Local hardware: spray controller configured on GPIO 18.
+14:45:52 INFO    flight.drone_agent   DroneAgent initialised for 'Bravo' (drone-02).
+14:45:52 INFO    main                 Ready: drone_id=drone-02 mission='Swarm Field Spray' waypoints=3 peers_visible=0
+14:45:52 INFO    flight.drone_agent   [drone-02] Starting mission: 3 waypoints.
+14:45:52 INFO    flight.drone_agent   [drone-02] Connecting to udpin://0.0.0.0:14540 (mavsdk_server port 50051) ...
+14:45:54 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:45:54 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+14:45:54 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:45:54 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+14:45:54 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+14:45:54 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:45:54 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+14:45:54 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:45:54 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+14:45:54 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+14:45:54 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14541... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+14:45:54 INFO    mavsdk_server        New system on: 127.0.0.1:51632 (system ID: 1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\udp_connection.cpp:263)
+14:45:54 DEBUG   mavsdk_server        Component Autopilot (component ID: 1) added. (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:508)
+14:45:54 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14540... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+14:45:54 INFO    mavsdk_server        New system on: 127.0.0.1:55983 (system ID: 1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\udp_connection.cpp:263)
+14:45:54 DEBUG   mavsdk_server        Component Autopilot (component ID: 1) added. (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:508)
+14:45:55 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:45:55 INFO    mavsdk_server        System discovered (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:62)
+14:45:55 INFO    mavsdk_server        Server started (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:177)
+14:45:55 INFO    mavsdk_server        Server set to listen on 0.0.0.0:50052 (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:178)
+14:45:55 DEBUG   mavsdk.async_plugin_manager Connected to mavsdk_server!
+14:45:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:45:55 INFO    flight.drone_agent   [drone-01] Connected.
+14:45:55 INFO    flight.drone_agent   [drone-01] State: IDLE -> PREFLIGHT
+14:45:55 INFO    flight.drone_agent   [drone-01] Waiting for GPS lock ...
+14:45:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:45:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:45:56 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:45:56 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:45:56 INFO    mavsdk_server        System discovered (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:62)
+14:45:56 INFO    mavsdk_server        Server started (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:177)
+14:45:56 INFO    mavsdk_server        Server set to listen on 0.0.0.0:50051 (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:178)
+14:45:56 DEBUG   mavsdk.async_plugin_manager Connected to mavsdk_server!
+14:45:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:45:56 INFO    flight.drone_agent   [drone-02] Connected.
+14:45:56 INFO    flight.drone_agent   [drone-02] State: IDLE -> PREFLIGHT
+14:45:56 INFO    flight.drone_agent   [drone-02] Waiting for GPS lock ...
+14:45:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:45:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:45:56 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:45:58 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:45:58 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:45:58 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:45:58 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:00 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:00 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:00 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:01 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:03 INFO    mavsdk_server        heartbeats timed out (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:391)
+14:46:03 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:03 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:05 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:05 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:07 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:07 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:09 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:10 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:12 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:12 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:14 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:14 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:16 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:16 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:18 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:18 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:20 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:21 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:23 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:23 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:24 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:25 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:25 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:25 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:46:26 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:26 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:27 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:28 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:28 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:29 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:30 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:31 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:31 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:32 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:32 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:33 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:33 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:34 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:34 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:35 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:36 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:36 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:37 INFO    mavsdk_server        heartbeats timed out (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:391)
+14:46:38 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:39 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:41 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:41 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:43 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:43 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:45 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:45 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:47 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:48 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:50 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:50 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:52 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:52 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:54 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:55 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:57 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:57 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:46:57 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:58 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:46:59 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:46:59 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:46:59 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:00 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:01 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:01 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:02 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:03 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:04 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:04 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:06 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:06 INFO    mavsdk_server        heartbeats timed out (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:391)
+14:47:06 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:07 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:09 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:09 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:11 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:11 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:11 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:12 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:47:13 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:13 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:13 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:14 INFO    flight.drone_agent   [drone-02] GPS lock acquired.
+14:47:14 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:14 INFO    flight.drone_agent   [drone-02] Home position set: (28.613900, 77.209000).
+14:47:14 INFO    flight.drone_agent   [drone-02] Arming ...
+14:47:14 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:14 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:15 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:15 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:16 ERROR   flight.drone_agent   [drone-02] ActionError: TIMEOUT: 'Timeout'; origin: arm(); params: (). Emergency shutdown + RTL.
+Traceback (most recent call last):
+  File "C:\Users\devaansh.makhijani\Repos-Work\GCS\swarm_system\drone_node\flight\drone_agent.py", line 315, in execute_mission
+    await self.arm_and_takeoff()
+  File "C:\Users\devaansh.makhijani\Repos-Work\GCS\swarm_system\drone_node\flight\drone_agent.py", line 148, in arm_and_takeoff
+    await self._system.action.arm()
+  File "C:\Users\devaansh.makhijani\Desktop\StyleStream\.venv\Lib\site-packages\mavsdk\action.py", line 359, in arm
+    raise ActionError(result, "arm()")
+mavsdk.action.ActionError: TIMEOUT: 'Timeout'; origin: arm(); params: ()
+14:47:16 INFO    flight.drone_agent   [drone-02] State: PREFLIGHT -> ERROR
+14:47:16 INFO    flight.safety        Pump OFF (GPIO 18) [SIMULATED].
+14:47:16 INFO    flight.drone_agent   [drone-02] Emergency stop issued for 'spray'.
+14:47:16 INFO    flight.drone_agent   [drone-02] Commanding RTL.
+14:47:16 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:16 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:16 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:17 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1938244245296
+14:47:18 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-02 state=ERROR lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:18 ERROR   flight.drone_agent   [drone-02] RTL command failed: TIMEOUT: 'Timeout'; origin: return_to_launch(); params: ()
+14:47:18 INFO    flight.drone_agent   [drone-02] Mission cleanup complete.
+14:47:18 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:18 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:20 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:22 INFO    mavsdk_server        heartbeats timed out (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:391)
+14:47:28 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:29 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:47:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:30 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:32 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:32 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:34 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:34 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:36 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:37 INFO    mavsdk_server        heartbeats timed out (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:391)
+14:47:44 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:45 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+14:47:46 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:46 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:48 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:49 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:51 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:51 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+14:47:53 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2096271748720
+14:47:55 INFO    mavsdk_server        heartbeats timed out (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:391)
+14:47:59 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+15:02:29 INFO    main                 Loaded config: hardware_id=jetson-01
+15:02:29 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+15:02:29 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+15:02:29 INFO    main                 --mission given; skipping registration, using ../missions/standalone_mission.xml directly.
+15:02:29 INFO    core.mission_parser  Parsing mission file: ../missions/standalone_mission.xml
+15:02:29 DEBUG   core.mission_parser  Mission id=STANDALONE-001 name=Single Drone Standalone Spray version=2.0
+15:02:29 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+15:02:29 DEBUG   core.mission_parser  Parsed Drone[jetson-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+15:02:29 DEBUG   core.mission_parser  Parsed Drone[jetson-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+15:02:29 DEBUG   core.mission_parser  Parsed Drone[jetson-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+15:02:29 DEBUG   core.mission_parser  Parsed drone: Solo (jetson-01), 3 waypoint(s)
+15:02:29 INFO    core.mission_parser  Mission 'Single Drone Standalone Spray' parsed successfully: 1 drone(s), 3 waypoint(s) total.
+15:02:29 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+15:02:29 DEBUG   core.action_runner   ActionRunner initialised.
+15:02:29 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+15:02:29 INFO    main                 Local hardware: spray controller configured on GPIO 18.
+15:02:29 INFO    flight.drone_agent   DroneAgent initialised for 'Solo' (jetson-01).
+15:02:29 INFO    main                 Ready: drone_id=jetson-01 mission='Single Drone Standalone Spray' waypoints=3 peers_visible=0
+15:02:29 INFO    flight.drone_agent   [jetson-01] Starting mission: 3 waypoints.
+15:02:29 INFO    flight.drone_agent   [jetson-01] Connecting to tcp://127.0.0.1:5760 (mavsdk_server port 50051) ...
+15:02:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2031536468096
+15:02:30 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+15:02:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2031536468096
+15:02:30 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+15:02:30 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+15:02:30 INFO    mavsdk_server        Waiting to discover system on tcp://127.0.0.1:5760... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+15:02:30 WARNING mavsdk_server        Connection using tcp:// is deprecated, please use tcpin:// or tcpout:// (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\cli_arg.cpp:41)
+15:02:30 DEBUG   mavsdk_server        Component Autopilot (component ID: 1) added. (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:508)
+15:02:30 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+15:02:30 INFO    mavsdk_server        System discovered (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:62)
+15:02:30 INFO    mavsdk_server        Server started (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:177)
+15:02:30 INFO    mavsdk_server        Server set to listen on 0.0.0.0:50051 (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:178)
+15:02:30 DEBUG   mavsdk_server        MAVLink: info: EKF2 IMU0 is using GPS (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+15:02:30 DEBUG   mavsdk_server        MAVLink: info: EKF2 IMU1 is using GPS (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+15:02:30 DEBUG   mavsdk.async_plugin_manager Connected to mavsdk_server!
+15:02:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2031536468096
+15:02:30 INFO    flight.drone_agent   [jetson-01] Connected.
+15:02:30 INFO    flight.drone_agent   [jetson-01] State: IDLE -> PREFLIGHT
+15:02:30 INFO    flight.drone_agent   [jetson-01] Waiting for GPS lock ...
+15:02:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2031536468096
+15:02:30 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2031536468096
+15:15:43 INFO    main                 Loaded config: hardware_id=jetson-01
+15:15:43 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+15:15:43 INFO    main                 --mission given; skipping registration, using ../missions/standalone_mission.xml directly.
+15:15:43 INFO    core.mission_parser  Parsing mission file: ../missions/standalone_mission.xml
+15:15:43 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+15:15:43 DEBUG   core.mission_parser  Mission id=STANDALONE-001 name=Single Drone Standalone Spray version=2.0
+15:15:43 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+15:15:43 DEBUG   core.mission_parser  Parsed Drone[jetson-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+15:15:43 DEBUG   core.mission_parser  Parsed Drone[jetson-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+15:15:43 DEBUG   core.mission_parser  Parsed Drone[jetson-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+15:15:43 DEBUG   core.mission_parser  Parsed drone: Solo (jetson-01), 3 waypoint(s)
+15:15:43 INFO    core.mission_parser  Mission 'Single Drone Standalone Spray' parsed successfully: 1 drone(s), 3 waypoint(s) total.
+15:15:43 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+15:15:43 DEBUG   core.action_runner   ActionRunner initialised.
+15:15:43 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+15:15:43 INFO    main                 Local hardware: spray controller configured on GPIO 18.
+15:15:43 INFO    flight.drone_agent   DroneAgent initialised for 'Solo' (jetson-01).
+15:15:43 INFO    main                 Ready: drone_id=jetson-01 mission='Single Drone Standalone Spray' waypoints=3 peers_visible=0
+15:15:43 INFO    flight.drone_agent   [jetson-01] Starting mission: 3 waypoints.
+15:15:43 INFO    flight.drone_agent   [jetson-01] Connecting to udpin://0.0.0.0:14540 (mavsdk_server port 50051) ...
+15:15:43 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1542840989744
+15:15:43 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+15:15:43 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1542840989744
+15:15:43 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+15:15:43 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+15:15:43 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14540... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+15:15:44 INFO    mavsdk_server        New system on: 127.0.0.1:59451 (system ID: 1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\udp_connection.cpp:263)
+15:15:44 DEBUG   mavsdk_server        Component Autopilot (component ID: 1) added. (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:508)
+15:15:44 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+15:15:44 INFO    mavsdk_server        System discovered (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:62)
+15:15:44 INFO    mavsdk_server        Server started (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:177)
+15:15:44 INFO    mavsdk_server        Server set to listen on 0.0.0.0:50051 (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:178)
+15:15:44 DEBUG   mavsdk.async_plugin_manager Connected to mavsdk_server!
+15:15:44 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1542840989744
+15:15:44 INFO    flight.drone_agent   [jetson-01] Connected.
+15:15:44 INFO    flight.drone_agent   [jetson-01] State: IDLE -> PREFLIGHT
+15:15:44 INFO    flight.drone_agent   [jetson-01] Waiting for GPS lock ...
+15:15:44 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1542840989744
+15:15:44 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1542840989744
+15:56:54 INFO    main                 Loaded config: hardware_id=jetson-01
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: registration request sent (hardware_id=jetson-01).
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: registered as drone_id=drone-02.
+15:56:54 INFO    main                 Received mission from fleet_manager for drone_id=drone-02 -> cached at missions_cache\drone-02.xml
+15:56:54 INFO    core.mission_parser  Parsing mission file: missions_cache\drone-02.xml
+15:56:54 DEBUG   core.mission_parser  Mission id=SWARM-DEMO-001 name=Swarm Field Spray version=2.0
+15:56:54 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+15:56:54 DEBUG   core.mission_parser  Parsed drone: Alpha (drone-01), 3 waypoint(s)
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[1]: lat=28.615000 lon=77.210200 actions=['spray_on']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[2]: lat=28.615300 lon=77.210500 actions=['spray_pattern']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[3]: lat=28.615500 lon=77.210800 actions=['take_photo', 'spray_off']
+15:56:54 DEBUG   core.mission_parser  Parsed drone: Bravo (drone-02), 3 waypoint(s)
+15:56:54 INFO    core.mission_parser  Mission 'Swarm Field Spray' parsed successfully: 2 drone(s), 6 waypoint(s) total.
+15:56:54 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+15:56:54 DEBUG   core.action_runner   ActionRunner initialised.
+15:56:54 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+15:56:54 INFO    main                 Local hardware: spray controller configured on GPIO 18.
+15:56:54 INFO    flight.drone_agent   DroneAgent initialised for 'Bravo' (drone-02).
+15:56:54 INFO    main                 Ready: drone_id=drone-02 mission='Swarm Field Spray' waypoints=3 peers_visible=0
+15:56:54 INFO    flight.drone_agent   [drone-02] Starting mission: 3 waypoints.
+15:56:54 INFO    flight.drone_agent   [drone-02] Connecting to udpin://0.0.0.0:14540 (mavsdk_server port 50051) ...
+15:56:54 INFO    main                 Loaded config: hardware_id=jetson-02
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: registration request sent (hardware_id=jetson-02).
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+15:56:54 INFO    swarm.mqtt_link      SwarmLink: registered as drone_id=drone-01.
+15:56:54 INFO    main                 Received mission from fleet_manager for drone_id=drone-01 -> cached at missions_cache\drone-01.xml
+15:56:54 INFO    core.mission_parser  Parsing mission file: missions_cache\drone-01.xml
+15:56:54 DEBUG   core.mission_parser  Mission id=SWARM-DEMO-001 name=Swarm Field Spray version=2.0
+15:56:54 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+15:56:54 DEBUG   core.mission_parser  Parsed drone: Alpha (drone-01), 3 waypoint(s)
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[1]: lat=28.615000 lon=77.210200 actions=['spray_on']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[2]: lat=28.615300 lon=77.210500 actions=['spray_pattern']
+15:56:54 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[3]: lat=28.615500 lon=77.210800 actions=['take_photo', 'spray_off']
+15:56:54 DEBUG   core.mission_parser  Parsed drone: Bravo (drone-02), 3 waypoint(s)
+15:56:54 INFO    core.mission_parser  Mission 'Swarm Field Spray' parsed successfully: 2 drone(s), 6 waypoint(s) total.
+15:56:54 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+15:56:54 DEBUG   core.action_runner   ActionRunner initialised.
+15:56:54 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+15:56:54 INFO    main                 Local hardware: spray controller configured on GPIO 19.
+15:56:54 INFO    flight.drone_agent   DroneAgent initialised for 'Alpha' (drone-01).
+15:56:54 INFO    main                 Ready: drone_id=drone-01 mission='Swarm Field Spray' waypoints=3 peers_visible=0
+15:56:54 INFO    flight.drone_agent   [drone-01] Starting mission: 3 waypoints.
+15:56:54 INFO    flight.drone_agent   [drone-01] Connecting to udpin://0.0.0.0:14541 (mavsdk_server port 50052) ...
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2198328735744
+15:56:55 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=2198328735744
+15:56:55 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+15:56:55 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:55 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:55 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+15:56:55 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+15:56:55 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14540... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+15:56:55 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14541... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+15:56:55 INFO    mavsdk_server        New system on: 127.0.0.1:49906 (system ID: 1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\udp_connection.cpp:263)
+15:56:55 DEBUG   mavsdk_server        Component Autopilot (component ID: 1) added. (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:508)
+15:56:55 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+15:56:55 INFO    mavsdk_server        System discovered (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:62)
+15:56:55 INFO    mavsdk_server        Server started (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:177)
+15:56:55 INFO    mavsdk_server        Server set to listen on 0.0.0.0:50052 (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:178)
+15:56:55 DEBUG   mavsdk.async_plugin_manager Connected to mavsdk_server!
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:55 INFO    flight.drone_agent   [drone-01] Connected.
+15:56:55 INFO    flight.drone_agent   [drone-01] State: IDLE -> PREFLIGHT
+15:56:55 INFO    flight.drone_agent   [drone-01] Waiting for GPS lock ...
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:55 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:55 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=100%
+15:56:56 INFO    flight.drone_agent   [drone-01] GPS lock acquired.
+15:56:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:56 INFO    flight.drone_agent   [drone-01] Home position set: (28.615000, 77.210200).
+15:56:56 INFO    flight.drone_agent   [drone-01] Arming ...
+15:56:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:56 DEBUG   mavsdk_server        MAVLink: info: Arming motors (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+15:56:56 INFO    flight.drone_agent   [drone-01] Taking off to 10.0 m ...
+15:56:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:56 INFO    flight.drone_agent   [drone-01] State: PREFLIGHT -> FLYING
+15:56:56 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:57 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:56:58 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=0.0 m bat=100%
+15:56:58 DEBUG   mavsdk_server        MAVLink: emergency: Potential Thrust Loss (1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+15:57:00 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:57:00 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=2.0 m bat=99%
+15:57:01 DEBUG   mavsdk_server        MAVLink: info: EKF2 IMU0 in-flight yaw alignment complete (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+15:57:01 DEBUG   mavsdk_server        MAVLink: info: EKF2 IMU1 in-flight yaw alignment complete (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+15:57:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:57:02 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=6.7 m bat=99%
+15:57:04 INFO    flight.drone_agent   [drone-01] Reached takeoff altitude 9.6 m.
+15:57:04 INFO    flight.drone_agent   [drone-01] Flying to WP 1 lat=28.614200 lon=77.209300 alt=10.0 ('Alpha - spray on, entry edge of field A')
+15:57:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:57:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:57:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:57:04 ERROR   flight.drone_agent   [drone-01] ActionError: UNSUPPORTED: 'Unsupported'; origin: goto_location(); params: (28.6142, 77.2093, 10.0, nan). Emergency shutdown + RTL.
+Traceback (most recent call last):
+  File "C:\Users\devaansh.makhijani\Repos-Work\GCS\swarm_system\drone_node\flight\drone_agent.py", line 318, in execute_mission
+    await self.fly_to(wp)
+  File "C:\Users\devaansh.makhijani\Repos-Work\GCS\swarm_system\drone_node\flight\drone_agent.py", line 183, in fly_to
+    await self._system.action.goto_location(
+  File "C:\Users\devaansh.makhijani\Desktop\StyleStream\.venv\Lib\site-packages\mavsdk\action.py", line 594, in goto_location
+    raise ActionError(
+mavsdk.action.ActionError: UNSUPPORTED: 'Unsupported'; origin: goto_location(); params: (28.6142, 77.2093, 10.0, nan)
+15:57:04 INFO    flight.drone_agent   [drone-01] State: FLYING -> ERROR
+15:57:04 INFO    flight.safety        Pump OFF (GPIO 19) [SIMULATED].
+15:57:04 INFO    flight.drone_agent   [drone-01] Emergency stop issued for 'spray'.
+15:57:04 INFO    flight.drone_agent   [drone-01] Commanding RTL.
+15:57:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=3106265249936
+15:57:04 INFO    flight.drone_agent   [drone-01] State: ERROR -> RTL
+15:57:04 INFO    flight.drone_agent   [drone-01] Mission cleanup complete.
+16:01:02 INFO    main                 Loaded config: hardware_id=jetson-01
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: registration request sent (hardware_id=jetson-01).
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: registered as drone_id=drone-02.
+16:01:02 INFO    main                 Received mission from fleet_manager for drone_id=drone-02 -> cached at missions_cache\drone-02.xml
+16:01:02 INFO    core.mission_parser  Parsing mission file: missions_cache\drone-02.xml
+16:01:02 DEBUG   core.mission_parser  Mission id=SWARM-DEMO-001 name=Swarm Field Spray version=2.0
+16:01:02 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+16:01:02 DEBUG   core.mission_parser  Parsed drone: Alpha (drone-01), 3 waypoint(s)
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[1]: lat=28.615000 lon=77.210200 actions=['spray_on']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[2]: lat=28.615300 lon=77.210500 actions=['spray_pattern']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[3]: lat=28.615500 lon=77.210800 actions=['take_photo', 'spray_off']
+16:01:02 DEBUG   core.mission_parser  Parsed drone: Bravo (drone-02), 3 waypoint(s)
+16:01:02 INFO    core.mission_parser  Mission 'Swarm Field Spray' parsed successfully: 2 drone(s), 6 waypoint(s) total.
+16:01:02 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+16:01:02 DEBUG   core.action_runner   ActionRunner initialised.
+16:01:02 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+16:01:02 INFO    main                 Local hardware: spray controller configured on GPIO 18.
+16:01:02 INFO    flight.drone_agent   DroneAgent initialised for 'Bravo' (drone-02).
+16:01:02 INFO    main                 Ready: drone_id=drone-02 mission='Swarm Field Spray' waypoints=3 peers_visible=0
+16:01:02 INFO    flight.drone_agent   [drone-02] Starting mission: 3 waypoints.
+16:01:02 INFO    flight.drone_agent   [drone-02] Connecting to udpin://0.0.0.0:14540 (mavsdk_server port 50051) ...
+16:01:02 INFO    main                 Loaded config: hardware_id=jetson-02
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: connecting to broker localhost:1883 ...
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: registration request sent (hardware_id=jetson-02).
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: connected to broker.
+16:01:02 INFO    swarm.mqtt_link      SwarmLink: registered as drone_id=drone-01.
+16:01:02 INFO    main                 Received mission from fleet_manager for drone_id=drone-01 -> cached at missions_cache\drone-01.xml
+16:01:02 INFO    core.mission_parser  Parsing mission file: missions_cache\drone-01.xml
+16:01:02 DEBUG   core.mission_parser  Mission id=SWARM-DEMO-001 name=Swarm Field Spray version=2.0
+16:01:02 DEBUG   core.mission_parser  Schedule: start=2026-10-14 06:00:00 tz=Asia/Kolkata cron=None
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[1]: lat=28.614200 lon=77.209300 actions=['spray_on']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[2]: lat=28.614600 lon=77.209700 actions=['spray_pattern']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-01]/Waypoint[3]: lat=28.615000 lon=77.210100 actions=['spray_off']
+16:01:02 DEBUG   core.mission_parser  Parsed drone: Alpha (drone-01), 3 waypoint(s)
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[1]: lat=28.615000 lon=77.210200 actions=['spray_on']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[2]: lat=28.615300 lon=77.210500 actions=['spray_pattern']
+16:01:02 DEBUG   core.mission_parser  Parsed Drone[drone-02]/Waypoint[3]: lat=28.615500 lon=77.210800 actions=['take_photo', 'spray_off']
+16:01:02 DEBUG   core.mission_parser  Parsed drone: Bravo (drone-02), 3 waypoint(s)
+16:01:02 INFO    core.mission_parser  Mission 'Swarm Field Spray' parsed successfully: 2 drone(s), 6 waypoint(s) total.
+16:01:02 DEBUG   flight.telemetry_bus TelemetryBus initialised.
+16:01:02 DEBUG   core.action_runner   ActionRunner initialised.
+16:01:02 WARNING flight.safety        SprayController: Jetson.GPIO unavailable (No module named 'Jetson'). Running in SIMULATION mode — actions will be logged only.
+16:01:02 INFO    main                 Local hardware: spray controller configured on GPIO 19.
+16:01:02 INFO    flight.drone_agent   DroneAgent initialised for 'Alpha' (drone-01).
+16:01:02 INFO    main                 Ready: drone_id=drone-01 mission='Swarm Field Spray' waypoints=3 peers_visible=0
+16:01:02 INFO    flight.drone_agent   [drone-01] Starting mission: 3 waypoints.
+16:01:02 INFO    flight.drone_agent   [drone-01] Connecting to udpin://0.0.0.0:14541 (mavsdk_server port 50052) ...
+16:01:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1809623627056
+16:01:02 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+16:01:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1809623627056
+16:01:02 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+16:01:02 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+16:01:02 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14540... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+16:01:02 ERROR   mavsdk_server        bind error: No error (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\udp_connection.cpp:93)
+16:01:02 ERROR   mavsdk_server        Connection failed: Bind error (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:47)
+16:01:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:02 DEBUG   grpc._cython.cygrpc  Using AsyncIOEngine.POLLER as I/O engine
+16:01:02 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:02 DEBUG   mavsdk.async_plugin_manager Waiting for mavsdk_server to be ready...
+16:01:02 INFO    mavsdk_server        MAVSDK version: v3.17.4 (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavsdk_impl.cpp:35)
+16:01:02 INFO    mavsdk_server        Waiting to discover system on udpin://0.0.0.0:14541... (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:20)
+16:01:02 INFO    mavsdk_server        New system on: 127.0.0.1:49906 (system ID: 1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\udp_connection.cpp:263)
+16:01:02 DEBUG   mavsdk_server        Component Autopilot (component ID: 1) added. (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:508)
+16:01:03 DEBUG   mavsdk_server        Discovered 1 component (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:628)
+16:01:03 INFO    mavsdk_server        System discovered (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\connection_initiator.h:62)
+16:01:03 INFO    mavsdk_server        Server started (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:177)
+16:01:03 INFO    mavsdk_server        Server set to listen on 0.0.0.0:50052 (D:\a\MAVSDK\MAVSDK\src\mavsdk_server\src\grpc_server.cpp:178)
+16:01:03 DEBUG   mavsdk.async_plugin_manager Connected to mavsdk_server!
+16:01:03 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:03 INFO    flight.drone_agent   [drone-01] Connected.
+16:01:03 INFO    flight.drone_agent   [drone-01] State: IDLE -> PREFLIGHT
+16:01:03 INFO    flight.drone_agent   [drone-01] Waiting for GPS lock ...
+16:01:03 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:03 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:03 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=PREFLIGHT lat=0.00000 lon=0.00000 alt=0.0 m bat=93%
+16:01:04 INFO    flight.drone_agent   [drone-01] GPS lock acquired.
+16:01:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:04 INFO    flight.drone_agent   [drone-01] Home position set: (28.615000, 77.210199).
+16:01:04 INFO    flight.drone_agent   [drone-01] Arming ...
+16:01:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:04 DEBUG   mavsdk_server        MAVLink: info: Arming motors (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+16:01:04 INFO    flight.drone_agent   [drone-01] Taking off to 10.0 m ...
+16:01:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:04 INFO    flight.drone_agent   [drone-01] State: PREFLIGHT -> FLYING
+16:01:04 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:05 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:05 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=0.0 m bat=93%
+16:01:06 DEBUG   mavsdk_server        MAVLink: emergency: Potential Thrust Loss (1) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+16:01:07 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:08 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=0.8 m bat=93%
+16:01:09 DEBUG   mavsdk_server        MAVLink: info: EKF2 IMU0 in-flight yaw alignment complete (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+16:01:09 DEBUG   mavsdk_server        MAVLink: info: EKF2 IMU1 in-flight yaw alignment complete (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+16:01:09 WARNING mavsdk_server        Received ack for not-existing command: 512! Ignoring... (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavlink_command_sender.cpp:304)
+16:01:09 DEBUG   mavsdk_server        MAVLink: info: No ap_message for mavlink id (271) (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\system_impl.cpp:363)
+16:01:09 WARNING mavsdk_server        Received ack for not-existing command: 511! Ignoring... (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavlink_command_sender.cpp:304)
+16:01:09 WARNING mavsdk_server        Received ack for not-existing command: 512! Ignoring... (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavlink_command_sender.cpp:304)
+16:01:09 WARNING mavsdk_server        Received ack for not-existing command: 521! Ignoring... (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavlink_command_sender.cpp:304)
+16:01:09 WARNING mavsdk_server        Received ack for not-existing command: 512! Ignoring... (D:\a\MAVSDK\MAVSDK\src\mavsdk\core\mavlink_command_sender.cpp:304)
+16:01:10 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:10 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=6.7 m bat=93%
+16:01:12 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:12 INFO    flight.drone_agent   [drone-01] Reached takeoff altitude 9.6 m.
+16:01:12 INFO    flight.drone_agent   [drone-01] Flying to WP 1 lat=28.614200 lon=77.209300 alt=10.0 ('Alpha - spray on, entry edge of field A')
+16:01:12 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:12 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:13 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:13 DEBUG   flight.telemetry_bus Published telemetry: drone=drone-01 state=FLYING lat=28.61500 lon=77.21020 alt=9.6 m bat=92%
+16:01:13 ERROR   flight.drone_agent   [drone-01] ActionError: UNSUPPORTED: 'Unsupported'; origin: goto_location(); params: (28.6142, 77.2093, 10.0, 359.34000000000003). Emergency shutdown + RTL.
+Traceback (most recent call last):
+  File "C:\Users\devaansh.makhijani\Repos-Work\GCS\swarm_system\drone_node\flight\drone_agent.py", line 326, in execute_mission
+    await self.fly_to(wp)
+  File "C:\Users\devaansh.makhijani\Repos-Work\GCS\swarm_system\drone_node\flight\drone_agent.py", line 191, in fly_to
+    await self._system.action.goto_location(
+  File "C:\Users\devaansh.makhijani\Desktop\StyleStream\.venv\Lib\site-packages\mavsdk\action.py", line 594, in goto_location
+    raise ActionError(
+mavsdk.action.ActionError: UNSUPPORTED: 'Unsupported'; origin: goto_location(); params: (28.6142, 77.2093, 10.0, 359.34000000000003)
+16:01:13 INFO    flight.drone_agent   [drone-01] State: FLYING -> ERROR
+16:01:13 INFO    flight.safety        Pump OFF (GPIO 19) [SIMULATED].
+16:01:13 INFO    flight.drone_agent   [drone-01] Emergency stop issued for 'spray'.
+16:01:13 INFO    flight.drone_agent   [drone-01] Commanding RTL.
+16:01:13 DEBUG   grpc._cython.cygrpc  [_cygrpc] Loaded running loop: id(loop)=1749118553648
+16:01:13 INFO    flight.drone_agent   [drone-01] State: ERROR -> RTL
+16:01:13 INFO    flight.drone_agent   [drone-01] Mission cleanup complete.

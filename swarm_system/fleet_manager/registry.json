@@ -1,0 +1,4 @@
+{
+  "jetson-02": "drone-01",
+  "jetson-01": "drone-02"
+}

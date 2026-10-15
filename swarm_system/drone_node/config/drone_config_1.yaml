@@ -1,4 +1,7 @@
-# Demo config for drone 1 (SITL instance -I 0, telemetry on 14540/14550).
+# Demo config for drone 1 (SITL instance -I 0, radarku/ardupilot-sitl amd64
+# image). The container's TCP port 5760 only serves ONE client, so a host
+# -side mavlink_relay.py process owns that connection and fans it out over
+# UDP on 14540 (this) and 14550 (Mission Planner/QGC).
 hardware_id: jetson-01
 
 broker:
