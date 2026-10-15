@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Pushed to whichever Jetson the registry assigns drone_id="drone-01". -->
-<Mission id="SWARM-DEMO-001" name="Swarm Field Spray - Drone 01" version="1.0">
+<!-- Pushed to whichever Jetson the registry assigns drone_id="drone-01". v2 schema. -->
+<Mission id="SWARM-DEMO-001" name="Swarm Field Spray - Drone 01" version="2.0">
 
   <Schedule>
     <StartDate>2026-10-14T06:00:00</StartDate>
@@ -9,43 +9,34 @@
 
   <Fleet>
     <Drone id="drone-01" name="Alpha">
-      <ConnectionString>serial:///dev/ttyTHS1:921600</ConnectionString>
       <TakeoffAltitude>10</TakeoffAltitude>
       <DefaultSpeed>5</DefaultSpeed>
-      <SpraySettings>
-        <GpioPin>18</GpioPin>
-        <PumpOnDelayMs>200</PumpOnDelayMs>
-        <PumpOffDelayMs>300</PumpOffDelayMs>
-      </SpraySettings>
+
+      <Waypoints>
+        <Waypoint id="1">
+          <Lat>28.6142</Lat><Lon>77.2093</Lon><Alt>10</Alt>
+          <Action code="spray_on"/>
+          <LoiterSec>1</LoiterSec>
+          <Description>Alpha - spray on, entry edge of field A</Description>
+        </Waypoint>
+
+        <Waypoint id="2">
+          <Lat>28.6146</Lat><Lon>77.2097</Lon><Alt>10</Alt>
+          <Action code="spray_pattern">
+            <Arg key="pattern">zigzag</Arg>
+            <Arg key="passes">3</Arg>
+          </Action>
+          <Description>Alpha - zigzag spray pattern</Description>
+        </Waypoint>
+
+        <Waypoint id="3">
+          <Lat>28.6150</Lat><Lon>77.2101</Lon><Alt>10</Alt>
+          <Action code="spray_off"/>
+          <Description>Alpha - spray off, exit edge of field A</Description>
+        </Waypoint>
+      </Waypoints>
     </Drone>
   </Fleet>
-
-  <Waypoints>
-    <Waypoint id="1" drone_id="drone-01">
-      <Lat>28.6142</Lat><Lon>77.2093</Lon><Alt>10</Alt>
-      <Action>spray_on</Action>
-      <LoiterSec>1</LoiterSec>
-      <Description>Alpha - spray on, entry edge of field A</Description>
-    </Waypoint>
-    <Waypoint id="2" drone_id="drone-01">
-      <Lat>28.6146</Lat><Lon>77.2097</Lon><Alt>10</Alt>
-      <Action>custom_code</Action>
-      <Description>Alpha - zigzag spray pattern</Description>
-      <CustomCode>
-        <Module>plugins/spray_pattern.py</Module>
-        <Function>execute_spray_pattern</Function>
-        <Args>
-          <Arg key="pattern">zigzag</Arg>
-          <Arg key="passes">3</Arg>
-        </Args>
-      </CustomCode>
-    </Waypoint>
-    <Waypoint id="3" drone_id="drone-01">
-      <Lat>28.6150</Lat><Lon>77.2101</Lon><Alt>10</Alt>
-      <Action>spray_off</Action>
-      <Description>Alpha - spray off, exit edge of field A</Description>
-    </Waypoint>
-  </Waypoints>
 
   <Safety>
     <MinBatteryPercent>20</MinBatteryPercent>

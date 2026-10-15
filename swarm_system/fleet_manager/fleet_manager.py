@@ -1,19 +1,26 @@
 """
 fleet_manager.py — runs ON YOUR LAPTOP (not the Jetson).
 
-Three jobs:
+Four jobs:
 1. Registry — when a Jetson asks "who am I?" (identified by its stable
    hardware_id), look up or assign a drone_id, and hand back the mission
    XML that drone_id should fly. Mapping persists in registry.json so
    drone IDs survive restarts.
 2. Mission distribution — mission XML files live in missions/<drone_id>.xml
-   on the laptop; this script reads them and pushes the contents to the
-   requesting drone over MQTT (no central server push needed on the Jetson
-   side — the Jetson pulls once at startup).
+   (or one shared missions/swarm_mission.xml) on the laptop; this script
+   reads them and pushes the contents to the requesting drone over MQTT
+   (no central server push needed on the Jetson side — the Jetson pulls
+   once at startup).
 3. Fleet dashboard — subscribes to every drone's telemetry topic and
-   prints a live status table, exactly like drone_brain's status monitor,
-   but now fed by real distributed drones instead of one process's
-   internal agents.
+   prints a live status table.
+4. Ground scheduling — THIS is the scheduling authority now, not each
+   drone. It reads the shared mission's <StartDate> and broadcasts one
+   "swarm/launch" message to every drone at that exact moment, so the
+   whole swarm launches together instead of each drone independently
+   guessing when to start off its own clock. Each drone still keeps its
+   own local <StartDate> scheduler armed as a fallback — purely for
+   resilience if the ground link is down right at launch time — but the
+   ground broadcast is the primary trigger.
 
 This script does NOT fly anything and does NOT need MAVSDK. It only needs
 an MQTT broker running (see README.md for `mosquitto` setup) and network
@@ -22,6 +29,7 @@ reachability to every drone's WiFi/mesh.
 Usage
 -----
   python fleet_manager.py --broker-host 0.0.0.0 --broker-port 1883
+  python fleet_manager.py --broker-host 0.0.0.0 --launch-now   # operator "go" button, ignores <StartDate>
 """
 from __future__ import annotations
 
@@ -29,9 +37,13 @@ import argparse
 import json
 import logging
 import sys
+import threading
 import time
+import xml.etree.ElementTree as ET
+from datetime import datetime
 from pathlib import Path
 from typing import Dict
+from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
 
@@ -43,6 +55,7 @@ MISSIONS_DIR = Path(__file__).parent / "missions"
 REGISTER_REQUEST_TOPIC = "swarm/register/request"
 REGISTER_ACK_PREFIX = "swarm/register/ack"
 TELEMETRY_WILDCARD = "swarm/telemetry/+"
+LAUNCH_TOPIC = "swarm/launch"
 
 
 def _setup_logging() -> None:
@@ -80,21 +93,92 @@ class Registry:
         return drone_id
 
 
+SWARM_MISSION_FILE = MISSIONS_DIR / "swarm_mission.xml"
+
+
 def _load_mission_xml(drone_id: str) -> str | None:
     """
-    Each drone_id has its own mission file: missions/<drone_id>.xml
-    This is the full per-drone XML described in missions/mission_schema.xsd
-    (a <Mission> with exactly one <Drone id="drone_id"> and that drone's
-    own waypoints). Keeping one file per drone (rather than one shared
-    swarm file) is deliberate — it's simpler to author/update one drone's
-    plan without touching anyone else's, and it's what makes "one drone
-    standalone" and "N drones" the same code path.
+    Resolution order:
+
+    1. A single shared ``swarm_mission.xml``, if present — one <Mission>
+       with a <Drone> block per drone, served **identically** to every
+       drone that registers. Each drone's own drone_node then filters
+       out only its own <Drone id="..."> block (same mechanism already
+       used to pull a drone's own waypoints out of its Drone block).
+       This is what you want when the whole swarm's plan should live in
+       one place and move together.
+    2. Otherwise, a per-drone file ``missions/<drone_id>.xml`` — lets you
+       edit one drone's plan without touching anyone else's.
+
+    Both are valid under the same mission_schema.xsd; this is purely
+    about how fleet_manager stores/serves them, not a schema difference.
     """
+    if SWARM_MISSION_FILE.exists():
+        log.debug("Serving shared swarm_mission.xml to %s", drone_id)
+        return SWARM_MISSION_FILE.read_text(encoding="utf-8")
+
     path = MISSIONS_DIR / f"{drone_id}.xml"
     if not path.exists():
-        log.warning("No mission file found for %s at %s", drone_id, path)
+        log.warning(
+            "No mission available for %s: no shared swarm_mission.xml and no %s",
+            drone_id, path,
+        )
         return None
     return path.read_text(encoding="utf-8")
+
+
+def _broadcast_launch(client: mqtt.Client) -> None:
+    payload = json.dumps({"launch": True, "ts": datetime.now().isoformat()})
+    client.publish(LAUNCH_TOPIC, payload, qos=1)
+    log.info("GROUND SCHEDULER: launch broadcast sent to all drones.")
+
+
+def schedule_ground_launch(client: mqtt.Client, mission_xml: str) -> None:
+    """
+    Parse <Schedule><StartDate>/<TimeZone> out of the mission and arrange
+    a one-shot broadcast of swarm/launch at that exact moment. This is
+    the ground-side scheduler — it replaces each drone independently
+    deciding when to start off its own local clock with one authoritative
+    "go" signal sent to the whole swarm at once.
+
+    Uses a plain stdlib threading.Timer rather than APScheduler/asyncio —
+    fleet_manager is a simple synchronous script (paho runs its own
+    thread already), and a one-shot timer firing a single callback needs
+    nothing heavier than that.
+    """
+    try:
+        root = ET.fromstring(mission_xml)
+        start_text = (root.findtext("Schedule/StartDate") or "").strip()
+        tz_name = (root.findtext("Schedule/TimeZone") or "").strip()
+        if not start_text or not tz_name:
+            raise ValueError("missing StartDate or TimeZone")
+        tz = ZoneInfo(tz_name)
+        start_dt = datetime.fromisoformat(start_text).replace(tzinfo=tz)
+    except Exception as exc:
+        log.warning(
+            "GROUND SCHEDULER: could not parse <Schedule> from mission (%s). "
+            "No automatic launch will be scheduled — use --launch-now when ready.",
+            exc,
+        )
+        return
+
+    now = datetime.now(tz)
+    delay_sec = (start_dt - now).total_seconds()
+
+    if delay_sec <= 0:
+        log.warning(
+            "GROUND SCHEDULER: mission start_date %s is in the past. Broadcasting launch in 2s.",
+            start_dt.isoformat(),
+        )
+        threading.Timer(2.0, _broadcast_launch, args=(client,)).start()
+    else:
+        hours, remainder = divmod(int(delay_sec), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        log.info(
+            "GROUND SCHEDULER: will broadcast launch in %dh %dm %ds, at %s.",
+            hours, minutes, seconds, start_dt.isoformat(),
+        )
+        threading.Timer(delay_sec, _broadcast_launch, args=(client,)).start()
 
 
 class FleetManager:
@@ -170,14 +254,28 @@ class FleetManager:
 
 def main() -> None:
     _setup_logging()
-    p = argparse.ArgumentParser(description="Laptop-side fleet manager: registry + mission push + dashboard.")
+    p = argparse.ArgumentParser(description="Laptop-side fleet manager: registry + mission push + dashboard + ground scheduler.")
     p.add_argument("--broker-host", default="localhost")
     p.add_argument("--broker-port", type=int, default=1883)
+    p.add_argument(
+        "--launch-now", action="store_true",
+        help="Immediately broadcast the launch signal to every drone on startup, "
+             "ignoring the mission's <StartDate> (operator 'go' button).",
+    )
     args = p.parse_args()
 
     MISSIONS_DIR.mkdir(exist_ok=True)
     fm = FleetManager(args.broker_host, args.broker_port)
     fm._client.loop_start()
+
+    if args.launch_now:
+        log.info("--launch-now given: broadcasting launch immediately.")
+        _broadcast_launch(fm._client)
+    elif SWARM_MISSION_FILE.exists():
+        schedule_ground_launch(fm._client, SWARM_MISSION_FILE.read_text(encoding="utf-8"))
+    else:
+        log.info("No swarm_mission.xml and --launch-now not given — ground scheduler idle (per-drone files use local scheduling only).")
+
     fm.run_dashboard_forever()
     fm._client.loop_stop()
 

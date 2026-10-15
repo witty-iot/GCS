@@ -1,37 +1,43 @@
 """
 flight/drone_agent.py
 ----------------------
-One drone, one process, one Jetson. This is the dismantled/rebuilt version
-of drone_brain's agents/drone_agent.py.
+One drone, one process, one Jetson.
 
-What changed from drone_brain and why
---------------------------------------
-* drone_brain's DroneAgent was designed to be one of several instances
-  created inside a single SwarmCoordinator process controlling many drones
-  over separate connection strings. That doesn't match the real hardware:
-  each physical drone has its own Jetson, so each Jetson runs exactly one
-  DroneAgent against its own local Pixhawk. SwarmCoordinator is gone;
-  coordination across drones now happens over MQTT (see swarm/), not by
-  one process holding every MAVSDK connection.
-* SafetyWatchdog / SprayController are real now (flight/safety.py) instead
-  of importing nonexistent modules and silently no-op'ing.
-* The agent takes an optional ``SwarmState`` and injects it into
-  ``drone_context`` so custom-code plugins (and future decision logic) can
-  react to what other drones are doing, not just this drone's own state.
+v2 changes (generic action model)
+-----------------------------------
+* No more spray-specific code in the flight agent at all. There is no
+  ``SPRAY_ON``/``SPRAY_OFF`` branch, no ``self._spray`` member tied to
+  mission data. Every waypoint action — spraying included — runs through
+  the same generic ``ActionRunner``, resolved by action code to a plugin.
+* Hardware controllers (e.g. a spray pump) are handed in from ``main.py``
+  as an ``extra_context`` dict, built from each Jetson's *local* config,
+  never from the mission. They're injected into every action plugin's
+  ``drone_context`` under whatever key the Jetson owner chose (e.g.
+  ``"spray"``), and on mission abort/error, any of them that implements
+  an ``emergency_stop()`` method gets it called — generically, via
+  duck-typing, without the flight agent knowing what kind of hardware
+  it's shutting down.
+* ``connection_string`` is no longer part of the mission-derived
+  ``DroneConfig`` — it's always local-only, passed in as its own
+  constructor argument.
+* Per-waypoint ``Speed`` is honored via MAVSDK's
+  ``action.set_current_speed()`` before each ``goto_location()`` call,
+  falling back to the drone's ``default_speed_ms`` when a waypoint
+  doesn't specify one.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from mavsdk import System
 from mavsdk.action import ActionError
 
-from core.custom_code_runner import CustomCodeRunner
-from core.mission_plan import DroneConfig, SafetyConfig, Waypoint, WaypointAction
-from flight.safety import SafetyWatchdog, SprayController, haversine_m
+from core.action_runner import ActionRunner
+from core.mission_plan import DroneConfig, SafetyConfig, Waypoint
+from flight.safety import SafetyWatchdog, haversine_m
 from flight.telemetry_bus import DroneState, TelemetryBus, TelemetryEvent
 from swarm.swarm_state import SwarmState
 
@@ -51,24 +57,26 @@ class DroneAgent:
     def __init__(
         self,
         config: DroneConfig,
+        connection_string: str,
         safety: SafetyConfig,
         bus: TelemetryBus,
         swarm_state: Optional[SwarmState] = None,
         on_telemetry=None,
         mavsdk_server_port: int = 50051,
+        extra_context: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.config = config
+        self.connection_string = connection_string
         self.safety = safety
         self.bus = bus
         self.swarm_state = swarm_state or SwarmState()
         self._on_telemetry = on_telemetry  # optional callback(payload: dict) -> None, used to publish to MQTT
-        # mavsdk.System() spawns a local mavsdk_server that defaults to a FIXED
-        # port (50051) for every instance. Running more than one DroneAgent on
-        # the same machine (e.g. several --simulate drones for an SITL demo)
-        # with the default port causes the second System() to connect to the
-        # FIRST one's server instead of its own — silent cross-talk, not a
-        # connection error. Each drone on the same host needs a distinct port.
         self._mavsdk_server_port = mavsdk_server_port
+        # Local-hardware objects (e.g. a spray controller), keyed by
+        # whatever name the Jetson's own config chose. Merged into every
+        # action plugin's drone_context. The flight agent never inspects
+        # what's in here beyond duck-typing emergency_stop() on abort.
+        self._extra_context: Dict[str, Any] = extra_context or {}
 
         self._state: DroneState = DroneState.IDLE
         self._system: Optional[System] = None
@@ -79,12 +87,6 @@ class DroneAgent:
         self._last_lon: float = 0.0
         self._last_alt: float = 0.0
         self._last_battery: float = 100.0
-
-        self._spray = SprayController(
-            config.spray.gpio_pin,
-            config.spray.pump_on_delay_ms,
-            config.spray.pump_off_delay_ms,
-        )
 
         log.info("DroneAgent initialised for '%s' (%s).", config.name, config.id)
 
@@ -104,10 +106,10 @@ class DroneAgent:
     async def connect(self) -> None:
         log.info(
             "[%s] Connecting to %s (mavsdk_server port %d) ...",
-            self.config.id, self.config.connection_string, self._mavsdk_server_port,
+            self.config.id, self.connection_string, self._mavsdk_server_port,
         )
         self._system = System(port=self._mavsdk_server_port)
-        await self._system.connect(system_address=self.config.connection_string)
+        await self._system.connect(system_address=self.connection_string)
 
         async for state in self._system.core.connection_state():
             if state.is_connected:
@@ -172,6 +174,12 @@ class DroneAgent:
             self.config.id, wp.id, wp.lat, wp.lon, wp.alt, wp.description,
         )
 
+        target_speed = wp.speed if wp.speed is not None else self.config.default_speed_ms
+        try:
+            await self._system.action.set_current_speed(target_speed)
+        except ActionError as exc:
+            log.warning("[%s] Could not set speed to %.1f m/s: %s", self.config.id, target_speed, exc)
+
         await self._system.action.goto_location(
             latitude_deg=wp.lat, longitude_deg=wp.lon,
             absolute_altitude_m=wp.alt, yaw_deg=float("nan"),
@@ -202,34 +210,25 @@ class DroneAgent:
             raise MissionAborted(self._watchdog.reason or "safety watchdog triggered")
 
     # ------------------------------------------------------------------
-    # Action dispatch
+    # Action dispatch — fully generic, no action is special-cased
     # ------------------------------------------------------------------
 
-    async def handle_action(self, wp: Waypoint, runner: CustomCodeRunner) -> None:
-        action = wp.action
-        log.info("[%s] Executing action '%s' at WP %d.", self.config.id, action.value, wp.id)
+    async def handle_actions(self, wp: Waypoint, runner: ActionRunner) -> None:
+        """Run every action attached to this waypoint, in XML order."""
+        if not wp.actions:
+            log.debug("[%s] WP %d has no actions; nothing to run.", self.config.id, wp.id)
+            return
 
-        if action == WaypointAction.SPRAY_ON:
-            await asyncio.get_event_loop().run_in_executor(None, self._spray.spray_on)
-
-        elif action == WaypointAction.SPRAY_OFF:
-            await asyncio.get_event_loop().run_in_executor(None, self._spray.spray_off)
-
-        elif action == WaypointAction.CUSTOM_CODE:
-            if wp.custom_code is None:
-                log.error("[%s] WP %d action=custom_code but no CustomCodeConfig.", self.config.id, wp.id)
-                return
-            drone_context = {
-                "drone_id": self.config.id,
-                "position": {"lat": self._last_lat, "lon": self._last_lon, "alt": self._last_alt},
-                "battery_pct": self._last_battery,
-                "mavsdk_system": self._system,
-                "swarm_state": self.swarm_state,  # lets plugins react to peer drones
-            }
-            await runner.run(wp.custom_code, drone_context)
-
-        elif action == WaypointAction.NONE:
-            log.debug("[%s] WP %d action=none; no-op.", self.config.id, wp.id)
+        drone_context: Dict[str, Any] = {
+            "drone_id": self.config.id,
+            "position": {"lat": self._last_lat, "lon": self._last_lon, "alt": self._last_alt},
+            "battery_pct": self._last_battery,
+            "mavsdk_system": self._system,
+            "swarm_state": self.swarm_state,
+            **self._extra_context,  # local hardware controllers (e.g. "spray"), if any
+        }
+        for action in wp.actions:
+            await runner.run(action, drone_context)
 
     # ------------------------------------------------------------------
     # Telemetry publish loop (local bus + optional MQTT callback)
@@ -243,10 +242,6 @@ class DroneAgent:
             while True:
                 try:
                     async for batt in self._system.telemetry.battery():
-                        # remaining_percent is already 0-100 on this MAVSDK version,
-                        # not a 0-1 fraction — verified against live SITL telemetry.
-                        # (drone_brain's original code multiplied by 100 here, which
-                        # produced battery readings like "9000%".)
                         self._last_battery = batt.remaining_percent
                         break
                 except Exception as exc:
@@ -275,11 +270,21 @@ class DroneAgent:
     # Safety helpers
     # ------------------------------------------------------------------
 
-    async def _emergency_spray_off(self) -> None:
-        try:
-            await asyncio.get_event_loop().run_in_executor(None, self._spray.spray_off)
-        except Exception as exc:
-            log.error("[%s] Failed emergency spray_off: %s", self.config.id, exc)
+    async def _emergency_shutdown(self) -> None:
+        """
+        Generic shutdown on mission abort/error — calls emergency_stop()
+        on any hardware object in extra_context that defines one. The
+        flight agent has no idea what kind of hardware it's shutting
+        down; it's purely duck-typed.
+        """
+        for name, obj in self._extra_context.items():
+            stop_fn = getattr(obj, "emergency_stop", None)
+            if callable(stop_fn):
+                try:
+                    await asyncio.get_event_loop().run_in_executor(None, stop_fn)
+                    log.info("[%s] Emergency stop issued for '%s'.", self.config.id, name)
+                except Exception as exc:
+                    log.error("[%s] Emergency stop failed for '%s': %s", self.config.id, name, exc)
 
     async def _attempt_rtl(self) -> None:
         if self._system is None:
@@ -296,7 +301,7 @@ class DroneAgent:
     # Full mission lifecycle
     # ------------------------------------------------------------------
 
-    async def execute_mission(self, waypoints: List[Waypoint], runner: CustomCodeRunner) -> None:
+    async def execute_mission(self, waypoints: List[Waypoint], runner: ActionRunner) -> None:
         log.info("[%s] Starting mission: %d waypoints.", self.config.id, len(waypoints))
 
         try:
@@ -311,9 +316,9 @@ class DroneAgent:
 
             for wp in waypoints:
                 await self.fly_to(wp)
-                await self.handle_action(wp, runner)
+                await self.handle_actions(wp, runner)
 
-            await self._emergency_spray_off()
+            await self._emergency_shutdown()  # safety net: ensure all hardware is off before RTL
             await self._attempt_rtl()
 
             log.info("[%s] Waiting for landing ...", self.config.id)
@@ -332,19 +337,19 @@ class DroneAgent:
         except MissionAborted as exc:
             log.warning("[%s] Safety watchdog aborted mission: %s. RTL now.", self.config.id, exc)
             self._set_state(DroneState.ERROR)
-            await self._emergency_spray_off()
+            await self._emergency_shutdown()
             await self._attempt_rtl()
 
         except ActionError as exc:
-            log.error("[%s] ActionError: %s. Emergency spray_off + RTL.", self.config.id, exc, exc_info=True)
+            log.error("[%s] ActionError: %s. Emergency shutdown + RTL.", self.config.id, exc, exc_info=True)
             self._set_state(DroneState.ERROR)
-            await self._emergency_spray_off()
+            await self._emergency_shutdown()
             await self._attempt_rtl()
 
         except Exception as exc:
             log.error("[%s] Unexpected exception: %s. Attempting RTL.", self.config.id, exc, exc_info=True)
             self._set_state(DroneState.ERROR)
-            await self._emergency_spray_off()
+            await self._emergency_shutdown()
             await self._attempt_rtl()
 
         finally:

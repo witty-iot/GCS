@@ -4,37 +4,36 @@ core/mission_plan.py
 Data model for a parsed drone mission. All fields are
 immutable value objects — no business logic here.
 
+v2 schema changes (vs. v1)
+---------------------------
+* Waypoints now live nested inside each <Drone>, not as a flat sibling
+  list linked by a drone_id attribute — a mission reads as "this drone
+  does these things," not "here's every point, cross-reference the ID."
+* Every waypoint action is a plain action code (string) resolved to a
+  plugin at runtime by convention — there is no more built-in
+  "spray_on"/"spray_off" special case. Spraying is just a plugin like
+  any other; the schema has no opinion about what a drone's payload is.
+* Hardware wiring (GPIO pins, pump timing, serial port) is gone from
+  this file entirely — it was never mission data, it's a property of
+  one physical Jetson's wiring, and now lives only in that Jetson's
+  local drone_config.yaml, never transmitted over the network.
+* Waypoints may carry an optional per-waypoint Speed, independent of
+  the drone's default cruise speed.
+
 Classes
 -------
-WaypointAction   : Enum of supported waypoint-level actions.
-CustomCodeConfig : Configuration for a dynamic plugin call at a waypoint.
-Waypoint         : A single geographic target with metadata and action.
-SprayConfig      : GPIO and pump-timing settings for the sprayer hardware.
-DroneConfig      : Full configuration for one drone in the fleet.
-SafetyConfig     : Operational limits and failsafe thresholds.
-ScheduleConfig   : Mission start-time and optional repeat schedule.
-MissionPlan      : Top-level mission container returned by the parser.
+ActionConfig   : An action code + arguments to resolve and run at a waypoint.
+Waypoint       : A single geographic target with metadata and an action.
+DroneConfig    : One drone's mission-relevant config (altitude, speed, waypoints).
+SafetyConfig   : Operational limits and failsafe thresholds.
+ScheduleConfig : Mission start-time and optional repeat schedule.
+MissionPlan    : Top-level mission container returned by the parser.
 """
 from __future__ import annotations
 
-import dataclasses
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from enum import Enum
-
-
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
-
-class WaypointAction(str, Enum):
-    """Supported actions a drone can perform upon reaching a waypoint."""
-
-    SPRAY_ON    = "spray_on"
-    SPRAY_OFF   = "spray_off"
-    NONE        = "none"
-    CUSTOM_CODE = "custom_code"
 
 
 # ---------------------------------------------------------------------------
@@ -42,89 +41,74 @@ class WaypointAction(str, Enum):
 # ---------------------------------------------------------------------------
 
 @dataclass
-class CustomCodeConfig:
+class ActionConfig:
     """
-    Describes a dynamic plugin call to be executed at a waypoint.
+    An action to run at a waypoint, resolved to a plugin at runtime.
 
     Attributes
     ----------
-    module_path   : File-system path (relative to project root) of the plugin.
-    function_name : Name of the callable inside the module.
-    args          : Keyword arguments forwarded to the plugin function.
+    code : Short identifier (e.g. "spray_on", "take_photo", "spray_pattern").
+           Resolved by convention to ``plugins/<code>.py``'s ``run()``
+           function — no action is special-cased anywhere in the system.
+    args : Keyword arguments forwarded to the plugin's ``run()`` call.
     """
 
-    module_path:   str
-    function_name: str
-    args:          Dict[str, Any] = field(default_factory=dict)
+    code: str
+    args: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class Waypoint:
     """
-    A single geographic target with an associated action.
+    A single geographic target with zero or more actions to run on arrival.
 
     Attributes
     ----------
-    id          : Unique integer identifier (from XML attribute).
-    drone_id    : ID of the drone responsible for this waypoint.
+    id          : Unique integer identifier (from XML attribute), unique
+                  within its parent drone.
     lat         : Latitude in decimal degrees (WGS-84).
     lon         : Longitude in decimal degrees (WGS-84).
     alt         : Altitude in metres (interpretation depends on firmware mode).
-    action      : One of the ``WaypointAction`` enum values.
+    actions     : Actions to run on arrival, in XML order. Empty list means
+                  "just fly here, do nothing."
+    speed       : Optional per-waypoint cruise speed (m/s). Falls back to
+                  the drone's default_speed_ms when not set.
     loiter_sec  : Seconds to hover at the waypoint before proceeding.
     description : Free-text description for GCS display / logging.
-    custom_code : Present and non-None only when action == CUSTOM_CODE.
     """
 
     id:          int
-    drone_id:    str
     lat:         float
     lon:         float
     alt:         float
-    action:      WaypointAction
-    loiter_sec:  float                    = 0.0
-    description: str                      = ""
-    custom_code: Optional[CustomCodeConfig] = None
-
-
-@dataclass
-class SprayConfig:
-    """
-    GPIO / hardware settings for the drone's spray system.
-
-    Attributes
-    ----------
-    gpio_pin         : BCM GPIO pin number that drives the relay/pump.
-    pump_on_delay_ms : Milliseconds after GPIO HIGH before spray begins.
-    pump_off_delay_ms: Milliseconds after GPIO LOW before spray stops.
-    """
-
-    gpio_pin:          int
-    pump_on_delay_ms:  int
-    pump_off_delay_ms: int
+    actions:     List[ActionConfig] = field(default_factory=list)
+    speed:       Optional[float]    = None
+    loiter_sec:  float              = 0.0
+    description: str                = ""
 
 
 @dataclass
 class DroneConfig:
     """
-    Full configuration for one drone participating in the mission.
+    One drone's mission-relevant configuration — flight parameters and its
+    own waypoints. Deliberately contains nothing hardware-specific (no
+    serial port, no GPIO pins) — that's local-only data living on each
+    Jetson, never part of a mission that travels over the network.
 
     Attributes
     ----------
-    id                : Unique drone identifier (matches waypoint drone_id).
+    id                : Unique drone identifier.
     name              : Human-readable name (e.g. "Alpha").
-    connection_string : MAVSDK connection string (serial or UDP).
     takeoff_altitude_m: Target altitude reached during arm-and-takeoff.
-    default_speed_ms  : Cruise speed used for goto_location calls (m/s).
-    spray             : Hardware settings for the spray subsystem.
+    default_speed_ms  : Cruise speed used when a waypoint has no own Speed.
+    waypoints         : This drone's own ordered list of waypoints.
     """
 
     id:                 str
     name:               str
-    connection_string:  str
     takeoff_altitude_m: float
     default_speed_ms:   float
-    spray:              SprayConfig
+    waypoints:          List[Waypoint] = field(default_factory=list)
 
 
 @dataclass
@@ -173,8 +157,8 @@ class MissionPlan:
     """
     Top-level container for a parsed drone mission.
 
-    Produced by ``MissionParser.parse()`` and consumed by
-    ``SwarmCoordinator`` and ``MissionScheduler``.
+    Produced by ``MissionParser.parse()`` and consumed by the scheduler
+    and each drone's flight agent.
 
     Attributes
     ----------
@@ -182,8 +166,8 @@ class MissionPlan:
     name              : Human-readable mission name.
     version           : Schema/mission version string.
     schedule          : Start-time and optional repeat configuration.
-    drones            : Ordered list of drone configurations.
-    waypoints         : Full ordered list of waypoints (all drones).
+    drones            : Ordered list of drone configurations, each owning
+                        its own waypoints.
     safety            : Fleet-wide safety limits.
     rtl_after_mission : When True each drone RTLs after its last waypoint.
     """
@@ -193,7 +177,6 @@ class MissionPlan:
     version:           str
     schedule:          ScheduleConfig
     drones:            List[DroneConfig]
-    waypoints:         List[Waypoint]
     safety:            SafetyConfig
     rtl_after_mission: bool = True
 
@@ -201,34 +184,9 @@ class MissionPlan:
     # Convenience helpers
     # ------------------------------------------------------------------
 
-    def waypoints_for(self, drone_id: str) -> List[Waypoint]:
-        """
-        Return only the waypoints assigned to the given drone.
-
-        Parameters
-        ----------
-        drone_id : The drone identifier to filter by.
-
-        Returns
-        -------
-        List[Waypoint]
-            Ordered subset of ``self.waypoints`` where
-            ``waypoint.drone_id == drone_id``.
-        """
-        return [w for w in self.waypoints if w.drone_id == drone_id]
-
     def drone_by_id(self, drone_id: str) -> DroneConfig:
         """
         Return ``DroneConfig`` for the given identifier.
-
-        Parameters
-        ----------
-        drone_id : Unique drone identifier to look up.
-
-        Returns
-        -------
-        DroneConfig
-            The matching drone configuration.
 
         Raises
         ------
@@ -241,4 +199,3 @@ class MissionPlan:
         raise KeyError(
             f"No drone with id '{drone_id}' in mission '{self.id}'"
         )
-

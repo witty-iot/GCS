@@ -3,13 +3,17 @@ main.py — drone_node entry point. Runs ON THE JETSON, one instance per drone.
 
 Flow
 ----
-1. Load this Jetson's local config (hardware_id, broker address, serial port).
+1. Load this Jetson's local config (hardware_id, broker address, serial
+   port, and any local hardware like a spray pump).
 2. Try to register with fleet_manager over MQTT: "I'm jetson-01, who am I
    and what's my mission?" If the broker is unreachable or nobody answers
    in time, fall back to a locally cached/provided mission file and keep
    flying standalone — a single drone with no network must still work.
-3. Parse the mission XML, pull out just this drone's waypoints.
-4. Fly the mission. While flying, publish telemetry to MQTT (if connected)
+3. Parse the mission XML, pull out just this drone's own (nested) waypoints.
+4. Build local hardware controllers (e.g. SprayController) from this
+   Jetson's own config — never from the mission — and hand them to the
+   flight agent as "extra_context," injected into every action plugin.
+5. Fly the mission. While flying, publish telemetry to MQTT (if connected)
    so every other drone's swarm_state sees this one, and this one sees them.
 
 Usage
@@ -26,14 +30,16 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from typing import Any, Dict
 
 import yaml
 
-from core.custom_code_runner import CustomCodeRunner
+from core.action_runner import ActionRunner
 from core.mission_parser import MissionParser, MissionParseError
 from core.mission_plan import DroneConfig, MissionPlan
 from core.scheduler import MissionScheduler
 from flight.drone_agent import DroneAgent
+from flight.safety import SprayController
 from flight.telemetry_bus import TelemetryBus
 from swarm.mqtt_link import SwarmLink
 from swarm.swarm_state import SwarmState
@@ -70,14 +76,35 @@ def _parse_args() -> argparse.Namespace:
 
 
 class _SingleDroneRunner:
-    """Thin adapter so MissionScheduler (which calls `coordinator.run()`) works unchanged for one drone."""
+    """
+    Thin adapter so MissionScheduler (which calls `coordinator.run()`) works
+    unchanged for one drone.
 
-    def __init__(self, agent: DroneAgent, waypoints, runner: CustomCodeRunner) -> None:
+    Guards against double-execution: the mission can now be triggered by
+    TWO independent sources racing each other — fleet_manager's ground
+    launch broadcast (the primary trigger your CEO asked for) and this
+    drone's own local <StartDate> scheduler (the resilience fallback if
+    the ground link is down at launch time). Whichever fires first
+    actually flies; if the other fires afterward, this no-ops rather than
+    flying the same mission twice.
+    """
+
+    def __init__(self, agent: DroneAgent, waypoints, runner: ActionRunner) -> None:
         self._agent = agent
         self._waypoints = waypoints
         self._runner = runner
+        self._started = False
+        self._lock = asyncio.Lock()
 
     async def run(self) -> None:
+        async with self._lock:
+            if self._started:
+                log.info(
+                    "[%s] Mission already started via another trigger; ignoring duplicate launch.",
+                    self._agent.config.id,
+                )
+                return
+            self._started = True
         await self._agent.execute_mission(self._waypoints, self._runner)
 
 
@@ -108,14 +135,15 @@ async def _get_mission_xml_path(args: argparse.Namespace, cfg: dict, link: Swarm
     return fallback, cfg["hardware_id"]
 
 
-def _resolve_own_drone_config(plan: MissionPlan, drone_id: str, cfg: dict, simulate: bool) -> DroneConfig:
+def _resolve_own_drone_config(plan: MissionPlan, drone_id: str) -> DroneConfig:
     """
-    Pull this drone's config out of the parsed mission plan, but always
-    override the connection string with the LOCAL config — a shared mission
-    file should never dictate which serial port a specific Jetson uses.
+    Pull this drone's mission-relevant config (altitude, speed, its own
+    waypoints) out of the parsed mission plan. Nothing hardware-specific
+    lives on this object any more — there's no connection string or GPIO
+    config to override here, because the mission never carried any.
     """
     try:
-        drone_cfg = plan.drone_by_id(drone_id)
+        return plan.drone_by_id(drone_id)
     except KeyError:
         log.critical(
             "Mission plan has no <Drone id='%s'> entry. "
@@ -124,15 +152,28 @@ def _resolve_own_drone_config(plan: MissionPlan, drone_id: str, cfg: dict, simul
         )
         sys.exit(1)
 
-    if simulate and not cfg["drone"]["connection_string"].startswith("udp"):
-        log.warning(
-            "--simulate was passed but drone.connection_string is not a udp:// "
-            "address. Each drone's SITL instance uses a different port "
-            "(14540, 14541, ...) — set it explicitly per-Jetson in drone_config.yaml "
-            "rather than relying on a single hardcoded port for every drone."
+
+def _build_extra_context(cfg: dict) -> Dict[str, Any]:
+    """
+    Build this Jetson's local hardware controllers from its own config,
+    never from the mission. Returns a dict merged into every action
+    plugin's drone_context (e.g. {"spray": SprayController(...)}).
+    Empty if this Jetson has no hardware section configured — action
+    plugins that need it (spray_on.py/spray_off.py) no-op gracefully.
+    """
+    extra: Dict[str, Any] = {}
+    hardware = cfg.get("hardware") or {}
+
+    spray_cfg = hardware.get("spray")
+    if spray_cfg:
+        extra["spray"] = SprayController(
+            gpio_pin=spray_cfg["gpio_pin"],
+            pump_on_delay_ms=spray_cfg["pump_on_delay_ms"],
+            pump_off_delay_ms=spray_cfg["pump_off_delay_ms"],
         )
-    drone_cfg.connection_string = cfg["drone"]["connection_string"]
-    return drone_cfg
+        log.info("Local hardware: spray controller configured on GPIO %d.", spray_cfg["gpio_pin"])
+
+    return extra
 
 
 async def _amain() -> None:
@@ -162,21 +203,30 @@ async def _amain() -> None:
         log.critical("Mission parse failed: %s", exc)
         sys.exit(1)
 
-    own_cfg = _resolve_own_drone_config(plan, drone_id, cfg, args.simulate)
-    waypoints = plan.waypoints_for(drone_id)
+    own_cfg = _resolve_own_drone_config(plan, drone_id)
+    waypoints = own_cfg.waypoints
     if not waypoints:
         log.critical("No waypoints assigned to drone_id='%s' in this mission.", drone_id)
         sys.exit(1)
 
+    if args.simulate and not cfg["drone"]["connection_string"].startswith("udp"):
+        log.warning(
+            "--simulate was passed but drone.connection_string is not a udp:// "
+            "address. Each drone's SITL instance uses a different port "
+            "(14540, 14541, ...) — set it explicitly per-Jetson in drone_config.yaml."
+        )
+
     bus = TelemetryBus()
-    runner = CustomCodeRunner()
+    runner = ActionRunner()
     agent = DroneAgent(
         config=own_cfg,
+        connection_string=cfg["drone"]["connection_string"],
         safety=plan.safety,
         bus=bus,
         swarm_state=swarm_state,
         mavsdk_server_port=cfg["drone"].get("mavsdk_server_port", 50051),
         on_telemetry=link.publish_telemetry,
+        extra_context=_build_extra_context(cfg),
     )
 
     log.info(
@@ -187,11 +237,30 @@ async def _amain() -> None:
     if args.run_now:
         await agent.execute_mission(waypoints, runner)
     else:
+        # Two independent triggers race to start the mission:
+        #   1. fleet_manager's ground launch broadcast (primary — the
+        #      scheduling authority now lives on the ground, not here).
+        #   2. This drone's own local <StartDate> scheduler (fallback —
+        #      fires if the ground link is unreachable right at launch
+        #      time, so a disconnected drone still isn't stranded).
+        # _SingleDroneRunner guards against both firing.
         runner_wrapper = _SingleDroneRunner(agent, waypoints, runner)
+
         scheduler = MissionScheduler(runner_wrapper)
         scheduler.schedule_mission(plan)
         scheduler.start()
-        log.info("Scheduler armed. Waiting for start time (Ctrl-C to abort).")
+
+        async def _ground_launch_watcher() -> None:
+            await link.wait_for_launch()
+            log.info("[%s] Ground launch signal received — executing now.", drone_id)
+            await runner_wrapper.run()
+
+        ground_task = asyncio.create_task(_ground_launch_watcher())
+
+        log.info(
+            "Armed: waiting for ground launch signal (primary) or local <StartDate> %s (fallback). Ctrl-C to abort.",
+            plan.schedule.start_date,
+        )
         try:
             while True:
                 await asyncio.sleep(3600)
@@ -199,6 +268,7 @@ async def _amain() -> None:
             pass
         finally:
             scheduler.stop()
+            ground_task.cancel()
 
     link.close()
 

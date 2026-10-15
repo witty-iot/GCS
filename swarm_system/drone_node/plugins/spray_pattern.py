@@ -1,14 +1,19 @@
 """
 plugins/spray_pattern.py
 ------------------------
-Example custom code plugin. This module is loaded dynamically
-by ``CustomCodeRunner`` at runtime when a waypoint action is ``custom_code``.
+Action plugin for <Action code="spray_pattern">. Loaded dynamically by
+``core/action_runner.py`` purely by filename convention — this file is
+no different from spray_on.py or take_photo.py as far as the system is
+concerned, it just happens to implement spraying.
 
-The function receives the ``drone_context`` dict containing:
+The entry point must be named ``run`` and receives the ``drone_context``
+dict containing:
   - ``drone_id``     : str — unique identifier of the executing drone.
   - ``position``     : dict with keys ``lat``, ``lon``, ``alt`` (floats).
   - ``battery_pct``  : float — current battery percentage (0–100).
   - ``mavsdk_system``: mavsdk.System handle for advanced MAVSDK commands.
+  - ``spray``        : SprayController, if this Jetson's local config
+                       defines spray hardware (see spray_on.py/spray_off.py).
 
 Supported patterns
 ------------------
@@ -25,10 +30,10 @@ spiral
 
 Adding new patterns
 -------------------
-Add a new ``elif pattern == "my_pattern":`` branch inside
-``execute_spray_pattern`` and implement it following the existing style.
-For patterns that require actual MAVSDK movement commands, retrieve the
-system handle via ``drone_context["mavsdk_system"]``.
+Add a new ``elif pattern == "my_pattern":`` branch inside ``run()`` and
+implement it following the existing style. For patterns that require
+actual MAVSDK movement commands, retrieve the system handle via
+``drone_context["mavsdk_system"]``.
 """
 from __future__ import annotations
 
@@ -44,7 +49,7 @@ _PASS_DURATION_SEC: float = 2.0
 _INTER_PASS_PAUSE_SEC: float = 0.5
 
 
-async def execute_spray_pattern(
+async def run(
     drone_context: Dict[str, Any],
     pattern: str = "zigzag",
     passes: int = 3,
@@ -52,7 +57,7 @@ async def execute_spray_pattern(
     """
     Execute a configurable spray pattern for one waypoint segment.
 
-    This coroutine is called by ``CustomCodeRunner.run()`` and receives
+    This coroutine is called by ``ActionRunner.run()`` and receives
     the drone's live context plus the keyword arguments declared in the
     mission XML ``<Args>`` block.
 

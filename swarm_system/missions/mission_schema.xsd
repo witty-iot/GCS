@@ -3,10 +3,24 @@
   mission_schema.xsd
   ------------------
   XML Schema Definition for multi-drone swarm mission files.
-  Validates the structure of mission XML files used by the drone_brain system.
 
-  Version: 1.0
-  Author: drone_brain system
+  Version: 2.0
+  v2 changes from v1:
+    - Waypoints now nest inside their owning <Drone>, not a flat sibling
+      list cross-referenced by a drone_id attribute.
+    - <Action> is fully generic: a "code" attribute + optional <Arg>
+      children, resolved to a plugin at runtime. There is no longer a
+      fixed enum of built-in actions (no more spray_on/spray_off special
+      cased in the schema) — spraying is just one plugin among any
+      number of others (take_photo, drop_payload, whatever you write).
+    - A waypoint may have more than one <Action> — they run in the order
+      written (e.g. spray_on and take_photo at the same point).
+    - <ConnectionString> and <SpraySettings> are removed from <Drone>
+      entirely. Hardware wiring (serial port, GPIO pins) is never
+      mission data — it's local-only config on each Jetson, never
+      transmitted over the network.
+    - Waypoints may carry an optional per-waypoint <Speed>, overriding
+      the drone's DefaultSpeed for that leg.
 -->
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            elementFormDefault="qualified"
@@ -20,7 +34,6 @@
       <xs:sequence>
         <xs:element name="Schedule"         type="ScheduleType"/>
         <xs:element name="Fleet"            type="FleetType"/>
-        <xs:element name="Waypoints"        type="WaypointsType"/>
         <xs:element name="Safety"           type="SafetyType"/>
         <xs:element name="RtlAfterMission"  type="xs:boolean"/>
       </xs:sequence>
@@ -54,39 +67,26 @@
   </xs:complexType>
 
   <!-- =====================================================================
-       Drone: configuration for a single drone
+       Drone: mission-relevant configuration for a single drone, plus its
+       own nested waypoints. Deliberately contains nothing hardware-
+       specific — no connection string, no GPIO pins. That lives only in
+       each Jetson's local drone_config.yaml.
        ===================================================================== -->
   <xs:complexType name="DroneType">
     <xs:sequence>
-      <!-- MAVSDK connection string e.g. serial:///dev/ttyTHS1:921600 or udp://:14541 -->
-      <xs:element name="ConnectionString"  type="xs:string"/>
       <!-- Takeoff altitude in metres above ground level -->
       <xs:element name="TakeoffAltitude"   type="xs:decimal"/>
-      <!-- Default cruise speed in m/s -->
+      <!-- Default cruise speed in m/s, used when a waypoint has no own Speed -->
       <xs:element name="DefaultSpeed"      type="xs:decimal"/>
-      <!-- GPIO / spray hardware settings -->
-      <xs:element name="SpraySettings"     type="SpraySettingsType"/>
+      <!-- This drone's own ordered waypoints -->
+      <xs:element name="Waypoints"         type="WaypointsType"/>
     </xs:sequence>
     <xs:attribute name="id"   type="xs:string" use="required"/>
     <xs:attribute name="name" type="xs:string" use="required"/>
   </xs:complexType>
 
   <!-- =====================================================================
-       SpraySettings: GPIO and pump timing for sprayer hardware
-       ===================================================================== -->
-  <xs:complexType name="SpraySettingsType">
-    <xs:sequence>
-      <!-- BCM GPIO pin number driving the relay/pump -->
-      <xs:element name="GpioPin"         type="xs:integer"/>
-      <!-- Delay in milliseconds after GPIO goes HIGH before spray starts -->
-      <xs:element name="PumpOnDelayMs"   type="xs:integer"/>
-      <!-- Delay in milliseconds after GPIO goes LOW before spray stops -->
-      <xs:element name="PumpOffDelayMs"  type="xs:integer"/>
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- =====================================================================
-       Waypoints: ordered list of waypoints for all drones
+       Waypoints: ordered list of waypoints belonging to one drone
        ===================================================================== -->
   <xs:complexType name="WaypointsType">
     <xs:sequence>
@@ -95,7 +95,7 @@
   </xs:complexType>
 
   <!-- =====================================================================
-       Waypoint: a single geographic target with an associated action
+       Waypoint: a single geographic target with an optional action
        ===================================================================== -->
   <xs:complexType name="WaypointType">
     <xs:sequence>
@@ -103,54 +103,32 @@
       <xs:element name="Lon"         type="xs:decimal"/>
       <!-- Altitude in metres (absolute or relative to home depending on firmware) -->
       <xs:element name="Alt"         type="xs:decimal"/>
-      <!-- Action to perform upon reaching this waypoint -->
-      <xs:element name="Action"      type="WaypointActionEnum"/>
+      <!-- Optional: cruise speed for this leg, overrides the drone's DefaultSpeed -->
+      <xs:element name="Speed"       type="xs:decimal"  minOccurs="0"/>
+      <!-- Optional: action to perform upon reaching this waypoint -->
+      <xs:element name="Action"      type="ActionType"  minOccurs="0" maxOccurs="unbounded"/>
       <!-- Optional: seconds to loiter/hover at this waypoint -->
       <xs:element name="LoiterSec"   type="xs:decimal"  minOccurs="0" default="0"/>
       <!-- Human-readable description for logging / GCS display -->
       <xs:element name="Description" type="xs:string"   minOccurs="0" default=""/>
-      <!-- Present only when Action = custom_code -->
-      <xs:element name="CustomCode"  type="CustomCodeType" minOccurs="0"/>
     </xs:sequence>
-    <!-- Unique integer identifier for this waypoint -->
-    <xs:attribute name="id"       type="xs:integer" use="required"/>
-    <!-- The drone_id this waypoint is assigned to -->
-    <xs:attribute name="drone_id" type="xs:string"  use="required"/>
+    <!-- Unique integer identifier for this waypoint, within its parent drone -->
+    <xs:attribute name="id" type="xs:integer" use="required"/>
   </xs:complexType>
 
   <!-- =====================================================================
-       WaypointActionEnum: allowed action values at a waypoint
+       Action: a generic action code resolved to a plugin at runtime
+       (plugins/<code>.py, function run()) plus optional arguments.
+       No fixed enum — any code is valid, as long as a matching plugin
+       file exists.
        ===================================================================== -->
-  <xs:simpleType name="WaypointActionEnum">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="spray_on"/>
-      <xs:enumeration value="spray_off"/>
-      <xs:enumeration value="none"/>
-      <xs:enumeration value="custom_code"/>
-    </xs:restriction>
-  </xs:simpleType>
-
-  <!-- =====================================================================
-       CustomCode: dynamic plugin invocation configuration
-       ===================================================================== -->
-  <xs:complexType name="CustomCodeType">
+  <xs:complexType name="ActionType">
     <xs:sequence>
-      <!-- Path to the Python module file relative to the project root -->
-      <xs:element name="Module"    type="xs:string"/>
-      <!-- Name of the async or sync function to call inside the module -->
-      <xs:element name="Function"  type="xs:string"/>
-      <!-- Zero or more key-value argument pairs passed as **kwargs -->
-      <xs:element name="Args"      type="ArgsType" minOccurs="0"/>
-    </xs:sequence>
-  </xs:complexType>
-
-  <!-- =====================================================================
-       Args: a collection of string key-value pairs for plugin arguments
-       ===================================================================== -->
-  <xs:complexType name="ArgsType">
-    <xs:sequence>
+      <!-- Zero or more key-value argument pairs passed to the plugin's run() -->
       <xs:element name="Arg" type="ArgType" minOccurs="0" maxOccurs="unbounded"/>
     </xs:sequence>
+    <!-- Action identifier, e.g. "spray_on", "take_photo", "spray_pattern" -->
+    <xs:attribute name="code" type="xs:string" use="required"/>
   </xs:complexType>
 
   <xs:complexType name="ArgType">
@@ -178,4 +156,3 @@
   </xs:complexType>
 
 </xs:schema>
-

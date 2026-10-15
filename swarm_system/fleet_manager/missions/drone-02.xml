@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Pushed to whichever Jetson the registry assigns drone_id="drone-02". -->
-<Mission id="SWARM-DEMO-001" name="Swarm Field Spray - Drone 02" version="1.0">
+<!--
+  Pushed to whichever Jetson the registry assigns drone_id="drone-02". v2 schema.
+  WP3 has TWO actions (take_photo + spray_off) to demonstrate a waypoint
+  can run more than one action, in order. Also proves the format is
+  generic, not spray-specific — take_photo involves no spray hardware.
+-->
+<Mission id="SWARM-DEMO-001" name="Swarm Field Spray - Drone 02" version="2.0">
 
   <Schedule>
     <StartDate>2026-10-14T06:00:00</StartDate>
@@ -9,43 +14,36 @@
 
   <Fleet>
     <Drone id="drone-02" name="Bravo">
-      <ConnectionString>serial:///dev/ttyTHS1:921600</ConnectionString>
       <TakeoffAltitude>10</TakeoffAltitude>
       <DefaultSpeed>5</DefaultSpeed>
-      <SpraySettings>
-        <GpioPin>19</GpioPin>
-        <PumpOnDelayMs>200</PumpOnDelayMs>
-        <PumpOffDelayMs>300</PumpOffDelayMs>
-      </SpraySettings>
+
+      <Waypoints>
+        <Waypoint id="1">
+          <Lat>28.6150</Lat><Lon>77.2102</Lon><Alt>10</Alt>
+          <Action code="spray_on"/>
+          <LoiterSec>1</LoiterSec>
+          <Description>Bravo - spray on, entry edge of adjacent strip</Description>
+        </Waypoint>
+
+        <Waypoint id="2">
+          <Lat>28.6153</Lat><Lon>77.2105</Lon><Alt>10</Alt>
+          <Action code="spray_pattern">
+            <Arg key="pattern">linear</Arg>
+            <Arg key="passes">2</Arg>
+          </Action>
+          <Description>Bravo - linear spray pattern</Description>
+        </Waypoint>
+
+        <Waypoint id="3">
+          <Lat>28.6155</Lat><Lon>77.2108</Lon><Alt>15</Alt>
+          <Speed>2</Speed>
+          <Action code="take_photo"/>
+          <Action code="spray_off"/>
+          <Description>Bravo - climb, photograph the strip, and stop spraying - two actions at one waypoint</Description>
+        </Waypoint>
+      </Waypoints>
     </Drone>
   </Fleet>
-
-  <Waypoints>
-    <Waypoint id="1" drone_id="drone-02">
-      <Lat>28.6150</Lat><Lon>77.2102</Lon><Alt>10</Alt>
-      <Action>spray_on</Action>
-      <LoiterSec>1</LoiterSec>
-      <Description>Bravo - spray on, entry edge of adjacent strip</Description>
-    </Waypoint>
-    <Waypoint id="2" drone_id="drone-02">
-      <Lat>28.6153</Lat><Lon>77.2105</Lon><Alt>10</Alt>
-      <Action>custom_code</Action>
-      <Description>Bravo - linear spray pattern</Description>
-      <CustomCode>
-        <Module>plugins/spray_pattern.py</Module>
-        <Function>execute_spray_pattern</Function>
-        <Args>
-          <Arg key="pattern">linear</Arg>
-          <Arg key="passes">2</Arg>
-        </Args>
-      </CustomCode>
-    </Waypoint>
-    <Waypoint id="3" drone_id="drone-02">
-      <Lat>28.6155</Lat><Lon>77.2108</Lon><Alt>10</Alt>
-      <Action>spray_off</Action>
-      <Description>Bravo - spray off, exit edge of adjacent strip</Description>
-    </Waypoint>
-  </Waypoints>
 
   <Safety>
     <MinBatteryPercent>20</MinBatteryPercent>

@@ -30,3 +30,14 @@ drone:
 # Used only if the broker is unreachable or no fleet_manager answers in
 # time — lets a single drone fly standalone with no network at all.
 fallback_mission: "../missions/standalone_mission.xml"
+
+# Local hardware wiring. This is the only place GPIO pins / pump timing
+# live — never in the mission XML, never sent over the network. Only
+# add a "spray" section if this physical drone actually has a sprayer
+# wired up; the spray_on/spray_off action plugins no-op gracefully if
+# a mission references them on a drone with no spray hardware here.
+hardware:
+  spray:
+    gpio_pin: 18
+    pump_on_delay_ms: 200
+    pump_off_delay_ms: 300

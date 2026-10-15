@@ -15,3 +15,12 @@ drone:
   mavsdk_server_port: 50051
 
 fallback_mission: "../missions/standalone_mission.xml"
+
+# Local hardware wiring — never part of the mission XML, never sent over
+# the network. main.py reads this to build a SprayController and expose
+# it to action plugins (spray_on.py/spray_off.py) as drone_context["spray"].
+hardware:
+  spray:
+    gpio_pin: 18
+    pump_on_delay_ms: 200
+    pump_off_delay_ms: 300

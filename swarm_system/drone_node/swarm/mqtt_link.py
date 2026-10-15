@@ -1,7 +1,7 @@
 """
 swarm/mqtt_link.py
 --------------------
-Bridges this drone's process to the rest of the swarm over MQTT. Three jobs:
+Bridges this drone's process to the rest of the swarm over MQTT. Four jobs:
 
 1. Registration — ask the laptop-side fleet_manager "who am I?" using this
    Jetson's stable hardware_id, and receive back a drone_id + mission XML.
@@ -9,6 +9,14 @@ Bridges this drone's process to the rest of the swarm over MQTT. Three jobs:
    every other drone (and the laptop dashboard) can see it.
 3. Telemetry ingestion — subscribe to every other drone's telemetry topic
    and feed it into the local SwarmState.
+4. Ground-triggered launch — fleet_manager is the scheduling authority: it
+   watches the mission's <StartDate> (or an operator's explicit "go")
+   and broadcasts one "swarm/launch" message to every drone at once, for
+   real synchronized swarm takeoff. Each drone's own local scheduler
+   (core/scheduler.py, watching the same <StartDate>) stays armed the
+   whole time as a fallback — if the broker/ground link is unreachable
+   right at launch time, the drone still launches itself locally rather
+   than waiting forever for a signal that may never arrive.
 
 If the broker is unreachable (no laptop/network, or testing a single drone
 with nothing else running), this class degrades gracefully: connect() marks
@@ -36,6 +44,7 @@ log = logging.getLogger(__name__)
 TELEMETRY_TOPIC_PREFIX = "swarm/telemetry"
 REGISTER_REQUEST_TOPIC = "swarm/register/request"
 REGISTER_ACK_PREFIX = "swarm/register/ack"
+LAUNCH_TOPIC = "swarm/launch"
 
 
 class SwarmLink:
@@ -54,6 +63,7 @@ class SwarmLink:
 
         self._loop = asyncio.get_event_loop()
         self._register_ack_queue: asyncio.Queue = asyncio.Queue()
+        self._launch_event: asyncio.Event = asyncio.Event()
 
         self._client = mqtt.Client(client_id=f"drone-{hardware_id}", clean_session=True)
         self._client.on_connect = self._on_connect
@@ -83,6 +93,7 @@ class SwarmLink:
         log.info("SwarmLink: connected to broker.")
         client.subscribe(f"{REGISTER_ACK_PREFIX}/{self.hardware_id}")
         client.subscribe(f"{TELEMETRY_TOPIC_PREFIX}/+")
+        client.subscribe(LAUNCH_TOPIC)
 
     def _on_message(self, client, userdata, msg) -> None:
         try:
@@ -93,6 +104,11 @@ class SwarmLink:
 
         if msg.topic == f"{REGISTER_ACK_PREFIX}/{self.hardware_id}":
             self._loop.call_soon_threadsafe(self._register_ack_queue.put_nowait, payload)
+            return
+
+        if msg.topic == LAUNCH_TOPIC:
+            log.info("SwarmLink: ground launch signal received.")
+            self._loop.call_soon_threadsafe(self._launch_event.set)
             return
 
         if msg.topic.startswith(f"{TELEMETRY_TOPIC_PREFIX}/"):
@@ -134,6 +150,15 @@ class SwarmLink:
         self.drone_id = ack.get("drone_id")
         log.info("SwarmLink: registered as drone_id=%s.", self.drone_id)
         return ack
+
+    async def wait_for_launch(self) -> None:
+        """
+        Block until fleet_manager broadcasts the ground launch signal.
+        If the broker is unreachable, this simply never completes — the
+        caller is expected to race it against the local scheduler fallback
+        (see main.py), not rely on it alone.
+        """
+        await self._launch_event.wait()
 
     def publish_telemetry(self, payload: dict) -> None:
         if not self.connected or self.drone_id is None:

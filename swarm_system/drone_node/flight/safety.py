@@ -68,6 +68,15 @@ class SprayController:
         else:
             log.info("Pump ON (GPIO %d) [SIMULATED].", self.gpio_pin)
 
+    def emergency_stop(self) -> None:
+        """
+        Generic shutdown hook. DroneAgent calls this on any hardware
+        controller it was handed (duck-typed, no spray-specific knowledge
+        in the flight code) when a mission aborts or errors — it doesn't
+        know or care that this happens to be a spray controller.
+        """
+        self.spray_off()
+
     def spray_off(self) -> None:
         if self._gpio is not None:
             self._gpio.output(self.gpio_pin, self._gpio.LOW)

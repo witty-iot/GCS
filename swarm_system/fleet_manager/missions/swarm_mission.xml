@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  swarm_mission.xml
+
+  ONE file describing the whole swarm's mission — every drone registers
+  and receives this exact same file; each drone's drone_node then pulls
+  out only its own <Drone id="..."> block via plan.drone_by_id(drone_id).
+
+  fleet_manager.py prefers this file over the per-drone drone-01.xml /
+  drone-02.xml files when it exists (see _load_mission_xml()). Those
+  per-drone files are still supported as a fallback for when you want to
+  edit one drone's plan independently without this file's presence
+  forcing the shared-file model.
+
+  WP3 on drone-02 has TWO actions (take_photo + spray_off) to demonstrate
+  multi-action waypoints.
+-->
+<Mission id="SWARM-DEMO-001" name="Swarm Field Spray" version="2.0">
+
+  <Schedule>
+    <StartDate>2026-10-14T06:00:00</StartDate>
+    <TimeZone>Asia/Kolkata</TimeZone>
+  </Schedule>
+
+  <Fleet>
+
+    <Drone id="drone-01" name="Alpha">
+      <TakeoffAltitude>10</TakeoffAltitude>
+      <DefaultSpeed>5</DefaultSpeed>
+
+      <Waypoints>
+        <Waypoint id="1">
+          <Lat>28.6142</Lat><Lon>77.2093</Lon><Alt>10</Alt>
+          <Action code="spray_on"/>
+          <LoiterSec>1</LoiterSec>
+          <Description>Alpha - spray on, entry edge of field A</Description>
+        </Waypoint>
+
+        <Waypoint id="2">
+          <Lat>28.6146</Lat><Lon>77.2097</Lon><Alt>10</Alt>
+          <Action code="spray_pattern">
+            <Arg key="pattern">zigzag</Arg>
+            <Arg key="passes">3</Arg>
+          </Action>
+          <Description>Alpha - zigzag spray pattern</Description>
+        </Waypoint>
+
+        <Waypoint id="3">
+          <Lat>28.6150</Lat><Lon>77.2101</Lon><Alt>10</Alt>
+          <Action code="spray_off"/>
+          <Description>Alpha - spray off, exit edge of field A</Description>
+        </Waypoint>
+      </Waypoints>
+    </Drone>
+
+    <Drone id="drone-02" name="Bravo">
+      <TakeoffAltitude>10</TakeoffAltitude>
+      <DefaultSpeed>5</DefaultSpeed>
+
+      <Waypoints>
+        <Waypoint id="1">
+          <Lat>28.6150</Lat><Lon>77.2102</Lon><Alt>10</Alt>
+          <Action code="spray_on"/>
+          <LoiterSec>1</LoiterSec>
+          <Description>Bravo - spray on, entry edge of adjacent strip</Description>
+        </Waypoint>
+
+        <Waypoint id="2">
+          <Lat>28.6153</Lat><Lon>77.2105</Lon><Alt>10</Alt>
+          <Action code="spray_pattern">
+            <Arg key="pattern">linear</Arg>
+            <Arg key="passes">2</Arg>
+          </Action>
+          <Description>Bravo - linear spray pattern</Description>
+        </Waypoint>
+
+        <Waypoint id="3">
+          <Lat>28.6155</Lat><Lon>77.2108</Lon><Alt>15</Alt>
+          <Speed>2</Speed>
+          <Action code="take_photo"/>
+          <Action code="spray_off"/>
+          <Description>Bravo - climb, photograph the strip, and stop spraying - two actions at one waypoint</Description>
+        </Waypoint>
+      </Waypoints>
+    </Drone>
+
+  </Fleet>
+
+  <Safety>
+    <MinBatteryPercent>20</MinBatteryPercent>
+    <MaxHdop>2.0</MaxHdop>
+    <HeartbeatTimeoutSec>5</HeartbeatTimeoutSec>
+    <GeofenceRadiusM>500</GeofenceRadiusM>
+  </Safety>
+
+  <RtlAfterMission>true</RtlAfterMission>
+</Mission>
