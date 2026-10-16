@@ -21,6 +21,12 @@ Four jobs:
    own local <StartDate> scheduler armed as a fallback — purely for
    resilience if the ground link is down right at launch time — but the
    ground broadcast is the primary trigger.
+5. Heartbeat watchdog / notifications — a drone that stops sending
+   telemetry for longer than --heartbeat-timeout-sec is marked DOWN and
+   an alert fires (see notifier.py); when telemetry resumes, a recovery
+   alert fires. This is the only place that can detect a drone going
+   down, since it's the one process every drone's telemetry already
+   flows through.
 
 This script does NOT fly anything and does NOT need MAVSDK. It only needs
 an MQTT broker running (see README.md for `mosquitto` setup) and network
@@ -30,12 +36,14 @@ Usage
 -----
   python fleet_manager.py --broker-host 0.0.0.0 --broker-port 1883
   python fleet_manager.py --broker-host 0.0.0.0 --launch-now   # operator "go" button, ignores <StartDate>
+  python fleet_manager.py --webhook-url https://...            # Teams alert channel for drone-down/recovered
 """
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+import os
 import sys
 import threading
 import time
@@ -47,15 +55,22 @@ from zoneinfo import ZoneInfo
 
 import paho.mqtt.client as mqtt
 
+from notifier import Notifier
+
 log = logging.getLogger("fleet_manager")
 
 REGISTRY_FILE = Path(__file__).parent / "registry.json"
 MISSIONS_DIR = Path(__file__).parent / "missions"
+# Source of truth for action params lives next to the plugin code on the
+# ground checkout, same repo the Jetsons pull from — read-only from here.
+PLUGINS_DIR = Path(__file__).parent.parent / "drone_node" / "plugins"
 
 REGISTER_REQUEST_TOPIC = "swarm/register/request"
 REGISTER_ACK_PREFIX = "swarm/register/ack"
 TELEMETRY_WILDCARD = "swarm/telemetry/+"
 LAUNCH_TOPIC = "swarm/launch"
+
+DEFAULT_HEARTBEAT_TIMEOUT_SEC = 15.0
 
 
 def _setup_logging() -> None:
@@ -127,6 +142,41 @@ def _load_mission_xml(drone_id: str) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
+def _collect_action_meta(mission_xml: str) -> Dict[str, dict]:
+    """
+    For every unique <Action code="..."> referenced anywhere in the
+    mission, read that action's plugins/<code>.meta.json sidecar (source
+    of truth lives in drone_node/plugins/, right next to the plugin's
+    own .py code) and bundle the params into one dict keyed by code.
+
+    This travels WITH the mission in the registration ack, so a Jetson
+    always gets the ground's current params at mission-pickup time
+    instead of relying on its own local copy of that file possibly being
+    stale. Deliberately bundles only the metadata (parameters) — never
+    the plugin's .py code itself. Shipping executable code over MQTT at
+    mission-push time would mean a drone blindly runs whatever arrives
+    on the wire; plugin code stays deployed via git on every Jetson, same
+    as any other software update, not pushed per-mission.
+    """
+    meta: Dict[str, dict] = {}
+    try:
+        root = ET.fromstring(mission_xml)
+    except ET.ParseError as exc:
+        log.warning("Could not parse mission XML to collect action metadata: %s", exc)
+        return meta
+
+    codes = {el.get("code") for el in root.iter("Action") if el.get("code")}
+    for code in codes:
+        meta_path = PLUGINS_DIR / f"{code}.meta.json"
+        if not meta_path.exists():
+            continue
+        try:
+            meta[code] = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            log.warning("Could not read meta for action '%s' (%s); omitting from bundle.", code, exc)
+    return meta
+
+
 def _broadcast_launch(client: mqtt.Client) -> None:
     payload = json.dumps({"launch": True, "ts": datetime.now().isoformat()})
     client.publish(LAUNCH_TOPIC, payload, qos=1)
@@ -182,9 +232,23 @@ def schedule_ground_launch(client: mqtt.Client, mission_xml: str) -> None:
 
 
 class FleetManager:
-    def __init__(self, broker_host: str, broker_port: int) -> None:
+    def __init__(
+        self,
+        broker_host: str,
+        broker_port: int,
+        notifier: Notifier,
+        heartbeat_timeout_sec: float = DEFAULT_HEARTBEAT_TIMEOUT_SEC,
+    ) -> None:
         self.registry = Registry()
+        self.notifier = notifier
+        self.heartbeat_timeout_sec = heartbeat_timeout_sec
         self._latest_telemetry: Dict[str, dict] = {}
+        # Heartbeat tracking for the down/disconnected watchdog — separate
+        # from _latest_telemetry so a drone that registered but has never
+        # sent telemetry yet still gets a last_seen baseline (and so we
+        # don't lose the timestamp once dicts get large).
+        self._last_seen: Dict[str, float] = {}
+        self._alive: Dict[str, bool] = {}
 
         self._client = mqtt.Client(client_id="fleet_manager", clean_session=True)
         self._client.on_connect = self._on_connect
@@ -208,6 +272,27 @@ class FleetManager:
         elif msg.topic.startswith("swarm/telemetry/"):
             drone_id = msg.topic.rsplit("/", 1)[-1]
             self._latest_telemetry[drone_id] = payload
+            self._mark_seen(drone_id)
+
+    def _mark_seen(self, drone_id: str) -> None:
+        self._last_seen[drone_id] = time.time()
+        if self._alive.get(drone_id) is False:
+            self.notifier.drone_recovered(drone_id)
+        self._alive[drone_id] = True
+
+    def _check_heartbeats(self) -> None:
+        """
+        Watchdog: any drone we've heard from before but not within
+        heartbeat_timeout_sec is considered down/disconnected. Fires once
+        per transition (alive -> down), not on every tick, so it doesn't
+        spam the same alert every dashboard refresh.
+        """
+        now = time.time()
+        for drone_id, last_seen in self._last_seen.items():
+            silent_for = now - last_seen
+            if silent_for > self.heartbeat_timeout_sec and self._alive.get(drone_id, True):
+                self._alive[drone_id] = False
+                self.notifier.drone_down(drone_id, silent_for)
 
     def _handle_register(self, payload: dict) -> None:
         hardware_id = payload.get("hardware_id")
@@ -225,31 +310,42 @@ class FleetManager:
             )
             return
 
-        ack = {"drone_id": drone_id, "mission_xml": mission_xml}
+        action_meta = _collect_action_meta(mission_xml)
+        ack = {"drone_id": drone_id, "mission_xml": mission_xml, "action_meta": action_meta}
         self._client.publish(f"{REGISTER_ACK_PREFIX}/{hardware_id}", json.dumps(ack), qos=1)
-        log.info("Registered %s -> %s, mission pushed.", hardware_id, drone_id)
+        log.info(
+            "Registered %s -> %s, mission pushed with metadata for actions: %s",
+            hardware_id, drone_id, ", ".join(sorted(action_meta)) or "(none)",
+        )
+        # Give it a last_seen baseline now, so a drone that registers but
+        # never sends a single telemetry message still gets flagged after
+        # heartbeat_timeout_sec rather than being silently ignored forever.
+        self._mark_seen(drone_id)
 
     def run_dashboard_forever(self, interval_sec: float = 5.0) -> None:
         log.info("Fleet dashboard running. Ctrl-C to stop.")
         try:
             while True:
                 time.sleep(interval_sec)
+                self._check_heartbeats()
                 self._print_table()
         except KeyboardInterrupt:
             log.info("Stopped.")
 
     def _print_table(self) -> None:
-        if not self._latest_telemetry:
+        if not self._latest_telemetry and not self._last_seen:
             print("(no telemetry received yet)")
             return
-        print(f"\n{'-'*70}\nFleet Status  [{time.strftime('%H:%M:%S')}]\n{'-'*70}")
-        print(f"{'Drone':<12}{'State':<12}{'Lat':>10}{'Lon':>12}{'Alt(m)':>9}{'Batt%':>8}")
-        for drone_id, t in sorted(self._latest_telemetry.items()):
+        print(f"\n{'-'*78}\nFleet Status  [{time.strftime('%H:%M:%S')}]\n{'-'*78}")
+        print(f"{'Drone':<12}{'Link':<8}{'State':<12}{'Lat':>10}{'Lon':>12}{'Alt(m)':>9}{'Batt%':>8}")
+        for drone_id in sorted(self._last_seen):
+            t = self._latest_telemetry.get(drone_id, {})
+            link = "OK" if self._alive.get(drone_id, True) else "DOWN"
             print(
-                f"{drone_id:<12}{t.get('state',''):<12}{t.get('lat',0):>10.5f}"
+                f"{drone_id:<12}{link:<8}{t.get('state',''):<12}{t.get('lat',0):>10.5f}"
                 f"{t.get('lon',0):>12.5f}{t.get('alt_m',0):>9.1f}{t.get('battery_pct',0):>8.1f}"
             )
-        print(f"{'-'*70}")
+        print(f"{'-'*78}")
 
 
 def main() -> None:
@@ -262,10 +358,22 @@ def main() -> None:
         help="Immediately broadcast the launch signal to every drone on startup, "
              "ignoring the mission's <StartDate> (operator 'go' button).",
     )
+    p.add_argument(
+        "--webhook-url", default=os.environ.get("SWARM_NOTIFY_WEBHOOK"),
+        help="Teams incoming-webhook URL to post drone-down/recovered alerts to. "
+             "Defaults to the SWARM_NOTIFY_WEBHOOK env var. Alerts are always "
+             "logged here regardless of whether this is set.",
+    )
+    p.add_argument(
+        "--heartbeat-timeout-sec", type=float, default=DEFAULT_HEARTBEAT_TIMEOUT_SEC,
+        help="Seconds without telemetry from a drone before it's flagged DOWN "
+             f"and an alert fires (default {DEFAULT_HEARTBEAT_TIMEOUT_SEC}).",
+    )
     args = p.parse_args()
 
     MISSIONS_DIR.mkdir(exist_ok=True)
-    fm = FleetManager(args.broker_host, args.broker_port)
+    notifier = Notifier(webhook_url=args.webhook_url)
+    fm = FleetManager(args.broker_host, args.broker_port, notifier, args.heartbeat_timeout_sec)
     fm._client.loop_start()
 
     if args.launch_now:

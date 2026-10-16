@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import sys
 from pathlib import Path
@@ -108,31 +109,49 @@ class _SingleDroneRunner:
         await self._agent.execute_mission(self._waypoints, self._runner)
 
 
-async def _get_mission_xml_path(args: argparse.Namespace, cfg: dict, link: SwarmLink) -> tuple[str, str]:
+async def _get_mission_xml_path(args: argparse.Namespace, cfg: dict, link: SwarmLink) -> tuple[str, str, Dict[str, Any]]:
     """
-    Returns (mission_xml_path, drone_id).
+    Returns (mission_xml_path, drone_id, action_meta).
+
+    action_meta is the per-action-code params dict fleet_manager bundled
+    into the registration ack (see fleet_manager.py's _collect_action_meta)
+    — the ground's current copy of every referenced action's meta.json,
+    delivered alongside the mission itself rather than assumed to already
+    be correct on this Jetson's local disk. Empty ({}) whenever there was
+    no registration (--mission given, or registration failed) — in that
+    case ActionRunner falls back to reading each plugin's local sidecar
+    meta.json file directly, same as before this existed.
 
     Tries registration first (unless --mission was given, which skips the
     network entirely). Falls back to the local mission file on any failure.
     """
     if args.mission:
         log.info("--mission given; skipping registration, using %s directly.", args.mission)
-        return args.mission, cfg["hardware_id"]
+        return args.mission, cfg["hardware_id"], {}
 
     ack = await link.register(timeout_sec=cfg["broker"]["register_timeout_sec"])
     if ack is not None:
         cache_path = Path("missions_cache") / f"{ack['drone_id']}.xml"
         cache_path.parent.mkdir(exist_ok=True)
         cache_path.write_text(ack["mission_xml"], encoding="utf-8")
-        log.info("Received mission from fleet_manager for drone_id=%s -> cached at %s", ack["drone_id"], cache_path)
-        return str(cache_path), ack["drone_id"]
+
+        action_meta: Dict[str, Any] = ack.get("action_meta", {})
+        meta_cache_path = Path("missions_cache") / f"{ack['drone_id']}.meta.json"
+        meta_cache_path.write_text(json.dumps(action_meta), encoding="utf-8")
+
+        log.info(
+            "Received mission from fleet_manager for drone_id=%s -> cached at %s "
+            "(action metadata for: %s)",
+            ack["drone_id"], cache_path, ", ".join(sorted(action_meta)) or "none",
+        )
+        return str(cache_path), ack["drone_id"], action_meta
 
     fallback = cfg.get("fallback_mission")
     if not fallback:
         log.critical("No registration ack and no fallback_mission configured. Cannot proceed.")
         sys.exit(1)
     log.warning("Registration failed/unavailable. Falling back to local mission: %s", fallback)
-    return fallback, cfg["hardware_id"]
+    return fallback, cfg["hardware_id"], {}
 
 
 def _resolve_own_drone_config(plan: MissionPlan, drone_id: str) -> DroneConfig:
@@ -193,7 +212,7 @@ async def _amain() -> None:
         connect_timeout_sec=cfg["broker"]["connect_timeout_sec"],
     )
 
-    mission_path, drone_id = await _get_mission_xml_path(args, cfg, link)
+    mission_path, drone_id, action_meta = await _get_mission_xml_path(args, cfg, link)
     if link.drone_id is None:
         link.drone_id = drone_id  # standalone fallback: use our own id as the telemetry topic name
 
@@ -218,6 +237,9 @@ async def _amain() -> None:
 
     bus = TelemetryBus()
     runner = ActionRunner()
+    if action_meta:
+        runner.preload_meta(action_meta)
+        log.info("Preloaded action metadata delivered with the mission for: %s", ", ".join(sorted(action_meta)))
     agent = DroneAgent(
         config=own_cfg,
         connection_string=cfg["drone"]["connection_string"],

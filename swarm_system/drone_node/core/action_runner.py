@@ -148,11 +148,26 @@ class ActionRunner:
         log.debug("Plugin loaded and cached for action '%s'.", action_code)
         return fn
 
+    def preload_meta(self, meta_by_code: Dict[str, Dict[str, Any]]) -> None:
+        """
+        Seed the meta cache from params delivered over the network
+        alongside the mission (fleet_manager's registration ack —
+        see main.py), so the ground's current copy of each action's
+        meta.json wins over whatever this Jetson's own local sidecar
+        file happens to contain. Any action code NOT present here still
+        falls back to reading its local plugins/<code>.meta.json the
+        first time it's used (e.g. when running fully offline/standalone
+        with no fleet_manager to deliver metadata at all).
+        """
+        self._meta_cache.update(meta_by_code)
+
     def load_meta(self, action_code: str) -> Dict[str, Any]:
         """
-        Load *action_code*'s parameters from its sidecar
+        Load *action_code*'s parameters, preferring ones already seeded
+        by ``preload_meta()`` (delivered over the network with the
+        mission). Falls back to the local sidecar
         ``plugins/<action_code>.meta.json`` file, if one exists. Missing
-        file -> ``{}`` (plenty of plugins, e.g. spray_on/spray_off/
+        everywhere -> ``{}`` (plenty of plugins, e.g. spray_on/spray_off/
         take_photo, take no parameters at all). Cached after first load.
         """
         if action_code in self._meta_cache:
