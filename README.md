@@ -14,7 +14,7 @@ multi-drone "coordinator" process anywhere in this system. Instead:
   there's no broker and no other drones, a `drone_node` just flies its own
   mission standalone. Multi-drone is additive, not required.
 
-## Architecture
+## How everything works
 
 ### What runs where
 
@@ -23,276 +23,198 @@ multi-drone "coordinator" process anywhere in this system. Instead:
 | **Your laptop** | `fleet_manager/fleet_manager.py` + an MQTT broker (`mosquitto`) | No | No |
 | **Each Jetson** (one per drone) | `drone_node/main.py` | Yes | Yes — its own, only |
 
-The laptop is pure coordination: it hands out drone IDs, pushes each
-drone's mission file, and prints a live telemetry dashboard. It never
-opens a MAVSDK/MAVLink connection. Every bit of flight logic — connecting
-to the Pixhawk, arming, navigating, spraying, failsafes — runs on the
-Jetson, and only that Jetson's own drone. There is no process anywhere
-that holds multiple drones' flight connections at once; each `drone_node`
-is a fully independent program, and the laptop + MQTT broker are the only
-thing standing between "one drone flying alone" and "a swarm."
+The laptop is pure coordination: it assigns drone IDs, pushes each drone's
+mission file (and that mission's action metadata — see below), broadcasts
+the swarm launch signal, and shows a live dashboard. It never opens a
+MAVSDK/MAVLink connection. Every bit of flight logic — connecting to the
+Pixhawk, arming, navigating, spraying, failsafes — runs on the Jetson, and
+only on that Jetson's own drone.
 
 ### MQTT pub/sub — how the pieces actually talk
 
-MQTT is the only thing connecting the laptop to the Jetsons, and
-Jetsons to each other. There's no other network call anywhere in this
-system (no REST API, no shared database, no direct socket between
-drones). A `mosquitto` broker runs once, on the laptop; everyone else
+MQTT is the only thing connecting the laptop to the Jetsons, and Jetsons
+to each other. There's no other network call anywhere in this system (no
+REST API, no shared database, no direct socket between drones). A
+`mosquitto` broker runs once, on the laptop; everyone else
 (`fleet_manager.py` and every `drone_node`) is just an MQTT client of it.
 Drones never talk directly to each other — all messages pass through the
 broker, keyed by topic name.
 
-Three topics, defined in `drone_node/swarm/mqtt_link.py` and mirrored in
+Topics, defined in `drone_node/swarm/mqtt_link.py` and mirrored in
 `fleet_manager/fleet_manager.py`:
 
-| Topic | Published by | Subscribed by | Payload | Purpose |
-|---|---|---|---|---|
-| `swarm/register/request` | `drone_node` (`SwarmLink.register()`) | `fleet_manager` | `{"hardware_id": "jetson-01"}` | "I'm this piece of hardware — who am I and what's my mission?" |
-| `swarm/register/ack/<hardware_id>` | `fleet_manager` (`_handle_register`) | the one `drone_node` with that `hardware_id` | `{"drone_id": "drone-01", "mission_xml": "<...>"}` | The answer: your assigned ID + the full mission file contents |
-| `swarm/telemetry/<drone_id>` | `drone_node` (`SwarmLink.publish_telemetry()`, called every ~2s from `DroneAgent._publish_telemetry_loop`) | every other `drone_node` (via `swarm/telemetry/+` wildcard) **and** `fleet_manager` (dashboard) | `{"lat", "lon", "alt_m", "battery_pct", "state", "timestamp"}` | Live position/state broadcast — this is the entire swarm-awareness mechanism |
-
-Two request/response flows ride on these topics:
-
-1. **Registration (once, at startup)** — `drone_node` publishes a
-   `register/request` with its `hardware_id`. `fleet_manager` looks that
-   `hardware_id` up in `registry.json` (assigning a fresh `drone-NN` if
-   it's never been seen before), reads `missions/<drone_id>.xml` off
-   disk, and publishes it back on the drone's own per-hardware-id ack
-   topic so only that drone receives it. The Jetson caches the mission
-   XML locally (`missions_cache/`) and uses it for the rest of the flight
-   — fleet_manager is not needed again after this point.
-2. **Telemetry (continuously, while flying)** — every drone publishes its
-   own state to `swarm/telemetry/<drone_id>` roughly every 2 seconds.
-   Every `drone_node` subscribes to the wildcard `swarm/telemetry/+`, so
-   it receives every *other* drone's telemetry too (it ignores its own
-   echo) and feeds it into its local `SwarmState` — this is what lets a
-   plugin ask "is any other drone critically low on battery?" without any
-   central brain deciding anything. `fleet_manager` subscribes to the same
-   wildcard purely to render the dashboard table; it doesn't act on it.
+| Topic | Published by | Subscribed by | Purpose |
+|---|---|---|---|
+| `swarm/register/request` | `drone_node` | `fleet_manager` | "I'm this hardware — who am I and what's my mission?" |
+| `swarm/register/ack/<hardware_id>` | `fleet_manager` | the one `drone_node` with that `hardware_id` | Assigned `drone_id` + the mission XML + that mission's action metadata |
+| `swarm/telemetry/<drone_id>` | `drone_node`, every ~2s | every other `drone_node` (wildcard) **and** `fleet_manager` | Live position/state broadcast — the entire swarm-awareness mechanism |
+| `swarm/launch` | `fleet_manager`, at the mission's `<StartDate>` (or `--launch-now`) | every `drone_node` | One authoritative "go" signal for synchronized swarm takeoff |
 
 Each piece degrades independently: if the broker is unreachable, a
-`drone_node` just never gets a registration ack, falls back to its
-locally configured `fallback_mission`, and flies standalone with an empty
-`SwarmState` (zero peers, no error). If `fleet_manager`/the broker isn't
-running at all, nothing on the Jetson even notices until the registration
-timeout — single-drone operation requires none of this infrastructure.
+`drone_node` falls back to its locally configured `fallback_mission` and
+flies standalone with an empty `SwarmState` (zero peers, no error).
+Single-drone operation requires none of this infrastructure.
 
-### File-by-file
+### Mission file + action system
+
+- **One shared mission file.** `fleet_manager/missions/swarm_mission.xml`
+  defines the whole swarm; every drone registers and receives the
+  identical file, then pulls out only its own `<Drone>` block.
+- **Actions are fully generic.** A waypoint's `<Action code="...">` is
+  just a name — `core/action_runner.py` resolves it to
+  `plugins/<code>.py` at runtime. Nothing is hardcoded (no built-in
+  `spray_on`/`spray_off` baked into the schema); adding a new action is
+  dropping in a new plugin file.
+- **Action parameters never live in the mission XML.** Each plugin's
+  tuning (e.g. `spray_pattern`'s pattern/passes) lives in a sidecar
+  `plugins/<code>.meta.json` file, and that metadata travels to the drone
+  *with* the mission over MQTT at registration time (bundled into the
+  registration ack by `fleet_manager`) — a Jetson always gets the
+  ground's current params, not a possibly-stale local copy.
+- **Multiple actions per waypoint**, wrapped in `<Actions mode="sequential
+  | parallel">` — run one after another, or launch them all at once.
+- Hardware wiring (GPIO pins, pump timing) is never mission data — it's
+  local-only config in each Jetson's `drone_config.yaml` under
+  `hardware:`.
+
+### Scheduling — ground-authoritative, with a local fallback
+
+`fleet_manager` is the scheduling authority: it parses the shared
+mission's `<StartDate>` and broadcasts one `swarm/launch` MQTT message to
+every drone at that exact moment — real synchronized takeoff from one
+signal, not each drone independently guessing. Each drone's own local
+scheduler (`core/scheduler.py`) stays armed the whole time as a
+**fallback only** — if the ground link is down right at launch time, the
+drone still launches itself off its own clock rather than waiting forever
+for a signal that may never arrive. An operator can also trigger launch
+manually, ignoring `<StartDate>` entirely:
+```bash
+python fleet_manager.py --broker-host localhost --launch-now
+```
+
+### Drone-down notifications
+
+`fleet_manager` tracks a last-seen timestamp for every registered drone.
+If a drone goes silent for longer than `--heartbeat-timeout-sec` (default
+15s), it's flagged DOWN and an alert fires — always logged locally, and
+also posted to a Teams channel if `--webhook-url` (or the
+`SWARM_NOTIFY_WEBHOOK` env var) is set. A matching alert fires when
+telemetry resumes. The live dashboard also shows a `Link: OK/DOWN` column
+per drone.
+
+### Directory structure
 
 ```
 swarm_system/
 ├── fleet_manager/                      # ───── LAPTOP ─────
-│   ├── fleet_manager.py                  MQTT client: answers register/request with a
-│   │                                      drone_id + mission XML, and prints a live
-│   │                                      telemetry table from swarm/telemetry/+.
-│   │                                      No MAVSDK, no Pixhawk, never flies anything.
-│   ├── missions/drone-01.xml, ...        One mission file per drone_id, authored by hand.
+│   ├── fleet_manager.py                  Registry, mission + metadata push, ground
+│   │                                      scheduler, heartbeat watchdog, live dashboard.
+│   ├── notifier.py                       Drone-down/recovered alerts (console + Teams).
+│   ├── missions/swarm_mission.xml        The one shared mission file for the whole swarm.
 │   ├── registry.json                     Auto-created/updated: hardware_id -> drone_id.
 │   └── requirements.txt                  Just paho-mqtt — deliberately lightweight.
 │
 ├── drone_node/                         # ───── JETSON (copy this whole folder per drone) ─────
-│   ├── main.py                           Entry point. Loads drone_config.yaml, asks
-│   │                                      fleet_manager who it is (or uses --mission to
-│   │                                      skip that), parses the mission, wires up
-│   │                                      DroneAgent + SwarmLink + SwarmState, flies.
+│   ├── main.py                           Entry point: registers, parses the mission,
+│   │                                      wires up DroneAgent + SwarmLink + SwarmState, flies.
 │   ├── config/
-│   │   └── drone_config.yaml             Per-Jetson hardware facts that never travel
-│   │                                      over the network: hardware_id, broker IP,
-│   │                                      serial port / SITL connection string,
-│   │                                      mavsdk_server_port, fallback_mission.
-│   ├── core/                             Mission data model + parsing + scheduling —
-│   │   │                                  no MQTT, no swarm awareness, pure mission logic.
-│   │   ├── mission_plan.py               Dataclasses: Waypoint, DroneConfig, SafetyConfig,
-│   │   │                                  ScheduleConfig, MissionPlan (the parsed result).
-│   │   ├── mission_parser.py             Reads a mission XML (validated against
-│   │   │                                  mission_schema.xsd) into a MissionPlan.
-│   │   ├── custom_code_runner.py         Dynamically loads/caches/executes the Python
-│   │   │                                  plugin a waypoint's action="custom_code" points
-│   │   │                                  at, passing it a drone_context dict.
-│   │   └── scheduler.py                  APScheduler wrapper: fires the mission at
-│   │                                      <StartDate> (or immediately with --run-now),
-│   │                                      optionally repeats on a cron schedule.
+│   │   └── drone_config.yaml             Per-Jetson hardware facts that never travel over
+│   │                                      the network: hardware_id, broker IP, connection
+│   │                                      string, mavsdk_server_port, local hardware wiring.
+│   ├── core/                             Mission data model + parsing + action resolution +
+│   │   ├── mission_plan.py               scheduling — no MQTT, no swarm awareness here.
+│   │   ├── mission_parser.py
+│   │   ├── action_runner.py              Resolves <Action code> to plugins/<code>.py,
+│   │   │                                  loads its meta.json (or network-delivered
+│   │   │                                  metadata), runs it — sync or async.
+│   │   └── scheduler.py                  Local fallback scheduler (see above).
 │   ├── flight/                           Everything that actually talks to the Pixhawk.
-│   │   ├── drone_agent.py                The core flight loop for THIS drone only:
-│   │   │                                  connect -> preflight/GPS lock -> arm/takeoff ->
-│   │   │                                  fly each waypoint -> run its action -> RTL/land.
-│   │   │                                  Publishes telemetry every 2s (local bus + MQTT
-│   │   │                                  callback) and checks the safety watchdog on
-│   │   │                                  every position update.
-│   │   ├── safety.py                     SafetyWatchdog (battery % + geofence radius
-│   │   │                                  checks against SafetyConfig) and SprayController
-│   │   │                                  (drives a real Jetson.GPIO pin, or logs a
-│   │   │                                  simulation if GPIO isn't available).
-│   │   └── telemetry_bus.py              In-process async pub/sub: DroneAgent publishes
-│   │                                      TelemetryEvents here; anything inside the SAME
-│   │                                      Python process can subscribe (per-drone or "*").
-│   │                                      This is local-only — it is NOT the MQTT layer;
-│   │                                      swarm/mqtt_link.py is what crosses the network.
+│   │   ├── drone_agent.py                Flight loop for THIS drone only: connect ->
+│   │   │                                  preflight -> arm/takeoff -> fly each waypoint ->
+│   │   │                                  run its actions -> RTL/land.
+│   │   ├── safety.py                     SafetyWatchdog (battery/geofence) + SprayController
+│   │   │                                  (real Jetson.GPIO, or a logged simulation).
+│   │   └── telemetry_bus.py              In-process async pub/sub (local only — NOT MQTT).
 │   ├── swarm/                             The ONLY code that talks MQTT.
-│   │   ├── mqtt_link.py                  SwarmLink: the paho-mqtt client. Sends the
-│   │   │                                  registration request, receives the ack, publishes
-│   │   │                                  this drone's telemetry, and feeds every peer's
-│   │   │                                  telemetry into SwarmState. Degrades to
-│   │   │                                  "disconnected, no peers" if the broker is down.
-│   │   └── swarm_state.py                SwarmState: in-memory dict of {drone_id ->
-│   │                                      PeerState}, built purely from MQTT telemetry
-│   │                                      messages. Exposes peers(), get(),
-│   │                                      any_peer_critical_battery() — the hook custom
-│   │                                      plugins use to react to what other drones are
-│   │                                      doing. Zero peers is a completely normal state
-│   │                                      (single-drone mode).
+│   │   ├── mqtt_link.py                  SwarmLink: registration, telemetry, launch signal.
+│   │   └── swarm_state.py                In-memory view of every other drone's telemetry.
 │   ├── plugins/
-│   │   └── spray_pattern.py              Example custom_code plugin (zigzag/linear/
-│   │                                      figure8/spiral patterns); receives drone_context
-│   │                                      which includes drone_context["swarm_state"].
-│   └── requirements.txt                  mavsdk (pinned <4.0.0), paho-mqtt, pyyaml,
-│                                          apscheduler — everything flight-related.
+│   │   ├── spray_on.py / spray_off.py / spray_pattern.py / take_photo.py
+│   │   └── *.meta.json                    Per-action parameters, sidecar to each plugin.
+│   └── requirements.txt
 │
 └── missions/
-    ├── mission_schema.xsd                 The XML schema every mission file must satisfy.
-    └── standalone_mission.xml             Fallback mission for offline / single-drone
-                                            testing — used when --mission is passed
-                                            directly or when registration fails/times out.
+    ├── mission_schema.xsd
+    └── standalone_mission.xml             Fallback mission for offline / single-drone testing.
 ```
 
-### How the swarm actually works, end to end
+### End to end
 
 1. **Boot.** Each Jetson runs `python main.py --config config/drone_config.yaml`
-   independently — nothing coordinates the *start* of these processes; you
-   just run one per drone, whenever that drone is powered on.
-2. **Registration.** `SwarmLink` tries to connect to the broker at the
-   laptop's IP (`drone_config.yaml: broker.host`). If it connects, it
-   publishes `swarm/register/request` with this Jetson's `hardware_id`
-   and waits (`register_timeout_sec`) for an ack on its own
-   `swarm/register/ack/<hardware_id>` topic.
-3. **ID + mission handout.** `fleet_manager`, already subscribed to
-   `swarm/register/request`, resolves `hardware_id -> drone_id` (assigning
-   `drone-01`, `drone-02`, ... the first time it sees a new hardware_id,
-   persisted to `registry.json`), reads that drone's `missions/<drone_id>.xml`,
-   and publishes the ack. The Jetson caches the mission XML to
-   `missions_cache/<drone_id>.xml` and is now done needing the laptop.
-4. **No broker / no ack / `--mission` passed.** Any of these fall back to
-   `drone_config.yaml: fallback_mission` (or the explicit `--mission` path)
-   — the drone flies standalone, `drone_id` becomes its own `hardware_id`,
-   and `SwarmState` simply never gets any peer updates. This is the same
-   code path as a full swarm, just with zero peers.
-5. **Mission parse + flight.** `MissionParser` turns the XML into a
-   `MissionPlan`; `main.py` pulls out just this `drone_id`'s waypoints and
-   hands everything to `DroneAgent.execute_mission()`, which connects to
-   this Jetson's own Pixhawk (via MAVSDK over serial or UDP), arms, takes
-   off, flies each waypoint in order, runs that waypoint's action
-   (spray on/off, a custom plugin, or nothing), then RTLs/lands — exactly
-   as if it were the only drone that existed.
-6. **Telemetry out.** While flying, `DroneAgent` publishes a
-   `TelemetryEvent` roughly every 2 seconds, both to the local
-   `TelemetryBus` (for anything inside this same process — currently just
-   logging) and, via the `on_telemetry` callback wired to
-   `SwarmLink.publish_telemetry`, to `swarm/telemetry/<drone_id>` on MQTT.
-7. **Telemetry in / swarm awareness.** Every other `drone_node`'s
-   `SwarmLink` is subscribed to `swarm/telemetry/+`, so it receives this
-   drone's broadcast and updates its own `SwarmState` with a fresh
-   `PeerState`. `DroneAgent` injects `swarm_state` into every
-   `custom_code` plugin's `drone_context`, so a plugin running on *this*
-   drone can query what *other* drones are doing right now (e.g.
-   `swarm_state.any_peer_critical_battery(20)`) without any message having
-   to pass through a central decision-maker — the "swarm" is just N
-   independent agents each listening to the same broadcast channel.
-8. **The laptop's view.** `fleet_manager` is subscribed to the same
-   `swarm/telemetry/+` wildcard purely to print the live dashboard table —
-   it's a passive observer of the swarm, not a controller of it. It also
-   never expires stale rows, so a drone that already landed and exited
-   still shows its last reading forever (cosmetic only).
+   independently — nothing coordinates process start; one per drone,
+   whenever that drone powers on.
+2. **Registration.** `SwarmLink` connects to the broker and publishes
+   `swarm/register/request` with this Jetson's `hardware_id`.
+3. **ID + mission + metadata handout.** `fleet_manager` resolves
+   `hardware_id -> drone_id` (assigning a new one if unseen, persisted to
+   `registry.json`), bundles the shared mission XML with every referenced
+   action's current metadata, and acks it back on that drone's own topic.
+   The Jetson caches both locally and is done needing the laptop.
+4. **No broker / no ack / `--mission` passed.** Falls back to
+   `drone_config.yaml: fallback_mission` — the drone flies standalone,
+   `SwarmState` simply never gets peer updates. Same code path as a full
+   swarm, just zero peers.
+5. **Launch.** The drone waits for either the ground `swarm/launch`
+   broadcast or its own local `<StartDate>` fallback — whichever fires
+   first wins, the other is a no-op.
+6. **Flight.** `DroneAgent` connects to this Jetson's own Pixhawk, arms,
+   takes off, flies each waypoint in order, runs that waypoint's actions
+   (sequential or parallel), then RTLs/lands.
+7. **Telemetry out/in.** Every ~2s, `DroneAgent` publishes telemetry to
+   `swarm/telemetry/<drone_id>`. Every other `drone_node` is subscribed to
+   the wildcard, so a plugin on *this* drone can query what *other* drones
+   are doing right now via `drone_context["swarm_state"]`, with no central
+   decision-maker in the loop.
+8. **The laptop's view.** `fleet_manager` renders the live dashboard from
+   that same telemetry wildcard, and its heartbeat watchdog uses it to
+   detect and alert on a drone going silent.
 
-## Key design decisions
+### Key design decisions
 
-1. **No central multi-drone coordinator.** One computer flying many drones
-   over different connection strings is physically wrong for this setup —
-   coordination is peer-to-peer over MQTT instead, never centralized.
+1. **No central multi-drone coordinator** — coordination is peer-to-peer
+   over MQTT, never one process holding every drone's flight connection.
 2. **`SafetyWatchdog` / `SprayController` are real, working
-   implementations** (`flight/safety.py`) — battery/geofence failsafes and
-   the spray pump itself are fully wired, not stubs.
-3. **A `swarm/` layer** gives every drone a live view of every other
-   drone's telemetry (`SwarmState`), fed by `SwarmLink` over MQTT, and
-   this is passed into action plugins via `drone_context["swarm_state"]`
-   — this is the hook for "drones know what others are doing."
-4. **ID assignment + mission handout is dynamic**, not hardcoded in one
-   shared XML. `fleet_manager.py` maps `hardware_id -> drone_id` on first
-   contact and pushes that drone's own mission file.
-5. Core mission/scheduling internals (`mission_plan.py`, `mission_parser.py`,
-   `action_runner.py`, `scheduler.py`, `telemetry_bus.py`,
-   `spray_pattern.py`) are stable, solid pieces of the system.
+   implementations** — battery/geofence failsafes and the spray pump
+   itself are fully wired, not stubs.
+3. **Action code never travels over the network** — only its metadata
+   does. Plugin `.py` files are deployed to every Jetson via git, the same
+   as any other software update, not pushed per-mission. Shipping
+   executable code over MQTT would mean a drone blindly runs whatever
+   arrives on the wire.
+4. **ID assignment + mission handout is dynamic**, not hardcoded.
 
-## Running it now — against real SITL (verified working end to end)
+### Known gaps, called out on purpose
 
-This whole chain was actually run, not just written: two ArduCopter SITL
-instances, fleet_manager, and two drone_node processes, flying real
-(simulated) missions with custom plugin actions, battery telemetry, and
-RTL/landing — confirmed via the logs, not assumed.
+- Waypoint flying uses `goto_location()` + a Python polling loop, not
+  MAVSDK's mission-upload API — the Pixhawk itself never holds the route,
+  so if the Jetson process dies mid-flight there's no onboard fallback
+  mission, just failsafes (RC loss, battery). Fine for short local test
+  flights; worth revisiting before longer unattended missions.
+- The fleet dashboard never expires a drone's last-seen telemetry row —
+  cosmetic only, the heartbeat watchdog's DOWN/OK status is accurate
+  regardless.
+- `mavsdk` v4 is a breaking API change (replaced the old `System()` gRPC
+  API with a different native binding) — `requirements.txt` pins
+  `mavsdk<4.0.0`.
 
-### SITL image: Mac vs Windows
+## Setup — Mac
 
-The ArduPilot SITL Docker image is architecture-specific, so which one
-you pull depends on the laptop:
+Two ArduCopter SITL instances,
+`fleet_manager`, and two `drone_node` processes, flying real (simulated)
+missions with action plugins, battery telemetry, and RTL/landing —
+confirmed via the logs, not assumed.
 
-| | **Mac (Apple Silicon)** | **Windows / Intel** |
-|---|---|---|
-| Image | `orthuk/ardupilot-sitl` (ARM-native) | an amd64-built SITL image |
-| MAVLink output | `--out=udp:...` flags — any number of UDP destinations straight from the container, so `drone_node` and QGroundControl can both be connected to the same drone at once | a single MAVLink TCP port, which only serves **one client at a time** |
-| Multiple drones + live map at once | Yes | Not without extra relay work — each container can only hand its one client to either `drone_node` or QGroundControl, not both, and that only gets worse per additional drone |
-| Verified here | Fully — this is the setup below, run end to end with two drones | Single drone only, for now |
-
-Everything from step 0 onward below is written for Mac/`orthuk`, since
-that's the path actually run end to end — it's the primary, supported way
-to run this. The Windows path is separate, below.
-
-### Windows setup (single drone)
-
-1. **Install Docker Desktop** (WSL2 backend) and pull an amd64-built
-   ArduPilot SITL image — substitute its actual tag for `<SITL_IMAGE>`
-   below (`orthuk/ardupilot-sitl`, used on Mac, is ARM-only and won't run
-   here).
-   ```powershell
-   docker pull <SITL_IMAGE>
-   ```
-2. **Run one container**, exposing its MAVLink TCP port to the host:
-   ```powershell
-   docker run -d -i --name sitl1 -p 5760:5760 <SITL_IMAGE> ...
-   ```
-   (whatever startup command that image documents for a single ArduCopter
-   instance). Unlike `orthuk`, this path doesn't give you multiple
-   `--out=udp:...` destinations — it's one MAVLink TCP client on port
-   `5760`, and only one.
-3. **Pick one of these two modes per run — not both at once** (the port
-   only serves a single client):
-
-   **Mode A — fly the mission with `drone_node`:**
-   ```yaml
-   drone:
-     connection_string: "tcp://127.0.0.1:5760"   # confirm this scheme against your mavsdk version
-   ```
-   ```powershell
-   cd swarm_system\drone_node
-   pip install -r requirements.txt
-   python main.py --config config\drone_config_1.yaml ^
-     --mission ..\missions\standalone_mission.xml --run-now
-   ```
-   No live map here — the port is already taken by `drone_node`, so a
-   ground station can't connect to the same instance at the same time.
-
-   **Mode B — watch/fly it manually in Mission Planner, no `drone_node`:**
-   1. Leave `drone_node` disconnected.
-   2. Open Mission Planner → top-right connection dropdown → select
-      **TCP** → host `127.0.0.1`, port `5760` → **Connect**.
-   3. Arm/fly it directly from Mission Planner's own controls to sanity
-      check the SITL instance itself, independent of this codebase.
-
-4. **One drone only, for now.** `fleet_manager` and the MQTT swarm layer
-   work identically on any platform, but two Windows SITL containers
-   still means two separate single-client ports with no way to watch
-   either one live at the same time — stick to a single drone until a
-   relay exists for sharing one TCP connection across multiple clients.
-
-### 0. Install Docker + the MQTT broker (laptop only, one-time)
+### 0. Install Docker + the MQTT broker (one-time)
 
 ```bash
 brew install mosquitto
@@ -342,11 +264,7 @@ python fleet_manager.py --broker-host localhost --broker-port 1883
 
 It prints a live fleet table (empty until a drone registers) and will
 assign `drone-01`, `drone-02`, ... to each new `hardware_id` it sees,
-pushing whatever mission file exists at `missions/<drone_id>.xml`.
-(Known cosmetic gap: the dashboard never expires a drone's last-seen
-telemetry, so a drone that already finished and exited still shows its
-final reading forever — harmless, just don't read a stale row as "still
-flying.")
+pushing the shared `missions/swarm_mission.xml` plus action metadata.
 
 ### 3a. One drone, no network at all (works today, no broker needed)
 
@@ -389,17 +307,6 @@ python main.py --config config/drone_config_1.yaml --run-now &
 python main.py --config config/drone_config_2.yaml --run-now &
 ```
 
-First run: it asks fleet_manager "who am I?", gets back `drone-01` and the
-contents of `fleet_manager/missions/drone-01.xml`, caches it locally
-under `missions_cache/`, and flies it. Run a second Jetson with
-`hardware_id: jetson-02` in its config and it gets `drone-02` with
-`fleet_manager/missions/drone-02.xml` automatically — no code changes.
-
-Drop `--run-now` to honor the mission's `<StartDate>` instead (the
-scheduler waits and fires at that exact time — see the "do I need to keep
-it plugged in" conversation: power the Jetson up a few minutes ahead of
-`StartDate`, it doesn't need to sit idle for hours).
-
 ### 4. Watching it on a map (QGroundControl)
 
 `fleet_manager`'s dashboard is text only. To see an actual moving drone
@@ -417,30 +324,66 @@ one map.
    listening on port `14550` (and a second one on `14551` for drone 2 —
    QGC will show both vehicles on the same map simultaneously).
 3. Run the mission as in step 3b. You'll see both drone icons move along
-   the real waypoints, climb to altitude, and RTL home — same as a real
-   flight, because QGC can't tell the difference.
+   the real waypoints, climb to altitude, and RTL home.
 
 ### 5. Adding a new drone to the swarm
 
 1. Flash/boot its Jetson, copy the `drone_node/` folder onto it.
 2. Set a unique `hardware_id` in its `drone_config.yaml`, point `broker.host`
    at your laptop.
-3. Drop a mission file for it at `fleet_manager/missions/drone-0N.xml`
-   (copy an existing one, change the `<Drone id>` and waypoints).
+3. Add a `<Drone id="...">` block for it in `fleet_manager/missions/swarm_mission.xml`.
 4. Run `python main.py` on that Jetson. Done — no changes to any other
    drone or to fleet_manager's code.
 
-### 6. Checking swarm-awareness is actually working
+## Setup — Windows
 
-With two drones running against `--simulate` SITL instances (or two real
-Jetsons), each one's log will show `peers_visible=N` on startup growing as
-others register, and `flight/drone_agent.py` passes `swarm_state` into
-every `custom_code` plugin's `drone_context` — a plugin can call
-`drone_context["swarm_state"].peers()` or
-`.any_peer_critical_battery(20)` to react to what other drones are doing.
-`plugins/spray_pattern.py` doesn't use this yet (it didn't need to); it's
-the hook to build reactive swarm behavior on top of, deliberately kept
-simple rather than over-built before you know which reactions you
-actually need.
+The ArduPilot SITL Docker image is architecture-specific — `orthuk/ardupilot-sitl`
+used above is ARM-native and won't run on Windows/Intel. An amd64-built
+SITL image is needed instead, and it behaves differently: it exposes a
+single MAVLink **TCP** port that only serves **one client at a time**,
+instead of the Mac image's `--out=udp:...` flags that can feed any number
+of destinations at once. Practical effect: on Windows, `drone_node` and a
+ground station can't both be connected to the same drone simultaneously,
+and that only gets worse per additional drone — so for now, **single
+drone only**.
 
+1. **Install Docker Desktop** (WSL2 backend) and pull the amd64 SITL
+   image:
+   ```powershell
+   docker pull radarku/ardupilot-sitl
+   ```
+2. **Run one container**, exposing its MAVLink TCP port to the host:
+   ```powershell
+   docker run -d -i --name sitl1 -p 5760:5760 radarku/ardupilot-sitl ...
+   ```
+   (whatever startup command that image documents for a single ArduCopter
+   instance).
+3. **Pick one of these two modes per run — not both at once** (the port
+   only serves a single client):
 
+   **Mode A — fly the mission with `drone_node`:**
+   ```yaml
+   drone:
+     connection_string: "tcp://127.0.0.1:5760"   # confirm this scheme against your mavsdk version
+   ```
+   ```powershell
+   cd swarm_system\drone_node
+   pip install -r requirements.txt
+   python main.py --config config\drone_config_1.yaml ^
+     --mission ..\missions\standalone_mission.xml --run-now
+   ```
+   No live map here — the port is already taken by `drone_node`, so a
+   ground station can't connect to the same instance at the same time.
+
+   **Mode B — watch/fly it manually in Mission Planner, no `drone_node`:**
+   1. Leave `drone_node` disconnected.
+   2. Open Mission Planner → top-right connection dropdown → select
+      **TCP** → host `127.0.0.1`, port `5760` → **Connect**.
+   3. Arm/fly it directly from Mission Planner's own controls to sanity
+      check the SITL instance itself, independent of this codebase.
+
+4. `fleet_manager` and the MQTT swarm layer work identically on any
+   platform — but two Windows SITL containers still means two separate
+   single-client ports with no way to watch either one live at the same
+   time, so stick to one drone until a relay exists for sharing a single
+   TCP connection across multiple clients.
