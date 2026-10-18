@@ -1,10 +1,9 @@
 # swarm_system
 
-Dismantled and rebuilt from `drone_brain`. The core difference: `drone_brain`
-assumed one process on one machine holds every drone's MAVSDK connection
-(`SwarmCoordinator` + N `DroneAgent`s in one Python process). That doesn't
-match your actual hardware — **one Jetson per drone, each only ever talks
-to its own Pixhawk.** So the multi-drone "coordinator" is gone. Instead:
+Built around one hard constraint: **one Jetson per drone, each only ever
+talks to its own Pixhawk.** A single process holding every drone's MAVSDK
+connection doesn't match that hardware reality, so there's no central
+multi-drone "coordinator" process anywhere in this system. Instead:
 
 - Every Jetson runs its own independent `drone_node` process, flying only
   its own mission, against only its own Pixhawk.
@@ -38,21 +37,21 @@ swarm_system/
 ├── drone_node/                # JETSON (copy this whole folder to each one)
 │   ├── config/
 │   │   └── drone_config.yaml   # EDIT per Jetson: hardware_id, broker IP, serial port
-│   ├── core/                   # kept from drone_brain, unchanged
+│   ├── core/
 │   │   ├── mission_plan.py
 │   │   ├── mission_parser.py
-│   │   ├── custom_code_runner.py
+│   │   ├── action_runner.py
 │   │   └── scheduler.py
 │   ├── flight/
-│   │   ├── telemetry_bus.py    # kept from drone_brain, unchanged
-│   │   ├── safety.py            # NEW — real SafetyWatchdog + SprayController
-│   │   └── drone_agent.py       # REWRITTEN — single-drone, real safety checks, swarm-aware
+│   │   ├── telemetry_bus.py
+│   │   ├── safety.py            # real SafetyWatchdog + SprayController
+│   │   └── drone_agent.py       # single-drone, real safety checks, swarm-aware
 │   ├── swarm/
-│   │   ├── swarm_state.py       # NEW — in-memory view of other drones
-│   │   └── mqtt_link.py         # NEW — registration + telemetry over MQTT
+│   │   ├── swarm_state.py       # in-memory view of other drones
+│   │   └── mqtt_link.py         # registration + telemetry over MQTT
 │   ├── plugins/
-│   │   └── spray_pattern.py    # kept from drone_brain, unchanged
-│   ├── main.py                  # NEW entry point
+│   │   └── spray_pattern.py
+│   ├── main.py                  # entry point
 │   └── requirements.txt
 │
 └── missions/
@@ -60,25 +59,24 @@ swarm_system/
     └── standalone_mission.xml   # fallback mission for offline / single-drone testing
 ```
 
-## What changed vs. drone_brain, concretely
+## Key design decisions
 
-1. **`SwarmCoordinator` deleted.** It modeled one computer flying many
-   drones over different connection strings — physically wrong for your
-   setup. Coordination is now peer-to-peer over MQTT, not centralized.
-2. **`SafetyWatchdog` / `SprayController` now actually exist and work**
-   (`flight/safety.py`). In drone_brain these were imports of modules that
-   were never included, so battery/geofence failsafes and the pump itself
-   silently did nothing.
-3. **New `swarm/` layer** gives every drone a live view of every other
+1. **No central multi-drone coordinator.** One computer flying many drones
+   over different connection strings is physically wrong for this setup —
+   coordination is peer-to-peer over MQTT instead, never centralized.
+2. **`SafetyWatchdog` / `SprayController` are real, working
+   implementations** (`flight/safety.py`) — battery/geofence failsafes and
+   the spray pump itself are fully wired, not stubs.
+3. **A `swarm/` layer** gives every drone a live view of every other
    drone's telemetry (`SwarmState`), fed by `SwarmLink` over MQTT, and
-   this is passed into custom-code plugins via `drone_context["swarm_state"]`
+   this is passed into action plugins via `drone_context["swarm_state"]`
    — this is the hook for "drones know what others are doing."
-4. **ID assignment + mission handout is now dynamic**, not hardcoded in one
+4. **ID assignment + mission handout is dynamic**, not hardcoded in one
    shared XML. `fleet_manager.py` maps `hardware_id -> drone_id` on first
    contact and pushes that drone's own mission file.
-5. Everything else (`mission_plan.py`, `mission_parser.py`,
-   `custom_code_runner.py`, `scheduler.py`, `telemetry_bus.py`,
-   `spray_pattern.py`) is kept as-is from `drone_brain` — it was solid.
+5. Core mission/scheduling internals (`mission_plan.py`, `mission_parser.py`,
+   `action_runner.py`, `scheduler.py`, `telemetry_bus.py`,
+   `spray_pattern.py`) are stable, solid pieces of the system.
 
 ## Mission schema v2 — generic, and now ground-scheduled
 
@@ -130,6 +128,69 @@ This whole chain was actually run, not just written: two ArduCopter SITL
 instances, fleet_manager, and two drone_node processes, flying real
 (simulated) missions with custom plugin actions, battery telemetry, and
 RTL/landing — confirmed via the logs, not assumed.
+
+### SITL image: Mac vs Windows
+
+The ArduPilot SITL Docker image is architecture-specific, so which one
+you pull depends on the laptop:
+
+| | **Mac (Apple Silicon)** | **Windows / Intel** |
+|---|---|---|
+| Image | `orthuk/ardupilot-sitl` (ARM-native) | an amd64-built SITL image |
+| MAVLink output | `--out=udp:...` flags — any number of UDP destinations straight from the container, so `drone_node` and QGroundControl can both be connected to the same drone at once | a single MAVLink TCP port, which only serves **one client at a time** |
+| Multiple drones + live map at once | Yes | Not without extra relay work — each container can only hand its one client to either `drone_node` or QGroundControl, not both, and that only gets worse per additional drone |
+| Verified here | Fully — this is the setup below, run end to end with two drones | Single drone only, for now |
+
+Everything from step 0 onward below is written for Mac/`orthuk`, since
+that's the path actually run end to end — it's the primary, supported way
+to run this. The Windows path is separate, below.
+
+### Windows setup (single drone)
+
+1. **Install Docker Desktop** (WSL2 backend) and pull an amd64-built
+   ArduPilot SITL image — substitute its actual tag for `<SITL_IMAGE>`
+   below (`orthuk/ardupilot-sitl`, used on Mac, is ARM-only and won't run
+   here).
+   ```powershell
+   docker pull <SITL_IMAGE>
+   ```
+2. **Run one container**, exposing its MAVLink TCP port to the host:
+   ```powershell
+   docker run -d -i --name sitl1 -p 5760:5760 <SITL_IMAGE> ...
+   ```
+   (whatever startup command that image documents for a single ArduCopter
+   instance). Unlike `orthuk`, this path doesn't give you multiple
+   `--out=udp:...` destinations — it's one MAVLink TCP client on port
+   `5760`, and only one.
+3. **Pick one of these two modes per run — not both at once** (the port
+   only serves a single client):
+
+   **Mode A — fly the mission with `drone_node`:**
+   ```yaml
+   drone:
+     connection_string: "tcp://127.0.0.1:5760"   # confirm this scheme against your mavsdk version
+   ```
+   ```powershell
+   cd swarm_system\drone_node
+   pip install -r requirements.txt
+   python main.py --config config\drone_config_1.yaml ^
+     --mission ..\missions\standalone_mission.xml --run-now
+   ```
+   No live map here — the port is already taken by `drone_node`, so a
+   ground station can't connect to the same instance at the same time.
+
+   **Mode B — watch/fly it manually in Mission Planner, no `drone_node`:**
+   1. Leave `drone_node` disconnected.
+   2. Open Mission Planner → top-right connection dropdown → select
+      **TCP** → host `127.0.0.1`, port `5760` → **Connect**.
+   3. Arm/fly it directly from Mission Planner's own controls to sanity
+      check the SITL instance itself, independent of this codebase.
+
+4. **One drone only, for now.** `fleet_manager` and the MQTT swarm layer
+   work identically on any platform, but two Windows SITL containers
+   still means two separate single-client ports with no way to watch
+   either one live at the same time — stick to a single drone until a
+   relay exists for sharing one TCP connection across multiple clients.
 
 ### 0. Install Docker + the MQTT broker (laptop only, one-time)
 
@@ -289,10 +350,10 @@ actually need.
    binding. `requirements.txt` now pins `mavsdk<4.0.0` — without this
    pin, every `System()` call in `drone_agent.py` throws a `TypeError`
    immediately.
-2. **Battery was reporting `9000%` instead of `90%`.** drone_brain's
-   original code did `remaining_percent * 100`, assuming a 0-1 fraction.
-   Live SITL telemetry showed `remaining_percent` is already 0-100.
-   Fixed in `flight/drone_agent.py`.
+2. **Battery was reporting `9000%` instead of `90%`.** The original code
+   did `remaining_percent * 100`, assuming a 0-1 fraction. Live SITL
+   telemetry showed `remaining_percent` is already 0-100. Fixed in
+   `flight/drone_agent.py`.
 3. **Two drones on one laptop silently cross-talked telemetry.** Every
    `mavsdk.System()` spawns a local `mavsdk_server` on a fixed default
    port (50051); running two `drone_node` processes without distinct
@@ -308,8 +369,8 @@ exactly the value of doing this on SITL before buying a Jetson.
 
 ## Known gap, called out on purpose
 
-Waypoint flying uses `goto_location()` + a Python polling loop (inherited
-from drone_brain), not MAVSDK's mission-upload API. This means the
+Waypoint flying uses `goto_location()` + a Python polling loop, not
+MAVSDK's mission-upload API. This means the
 Pixhawk itself never holds the route — if the Jetson process dies
 mid-flight, the drone has no onboard fallback mission, just failsafes
 (RC loss, battery). Fine for short local test flights; worth revisiting

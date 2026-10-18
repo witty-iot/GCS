@@ -1,11 +1,11 @@
 """
 core/scheduler.py
 -----------------
-APScheduler-based mission scheduler for the drone_brain swarm system.
+APScheduler-based mission scheduler for this swarm system.
 
 The ``MissionScheduler`` wraps an ``AsyncIOScheduler`` and is responsible
 for converting a ``MissionPlan``'s ``ScheduleConfig`` into concrete APScheduler
-jobs that fire ``SwarmCoordinator.run()`` at the right moment(s).
+jobs that fire the mission runner's ``run()`` at the right moment(s).
 
 Scheduling logic
 ~~~~~~~~~~~~~~~~

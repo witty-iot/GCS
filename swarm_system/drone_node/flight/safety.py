@@ -4,10 +4,9 @@ flight/safety.py
 Real implementations of the spray hardware controller and the in-flight
 safety watchdog.
 
-drone_brain (the predecessor to this system) referenced ``spray_controller``
-and ``safety_watchdog`` modules that were never actually included — those
-imports silently failed and both features were no-ops. This module provides
-working replacements:
+An earlier prototype referenced ``spray_controller`` and ``safety_watchdog``
+modules that were never actually included — those imports silently failed
+and both features were no-ops. This module provides working replacements:
 
 * ``SprayController`` drives a real GPIO pin on the Jetson via Jetson.GPIO,
   and falls back to a logged simulation when GPIO isn't available (laptop

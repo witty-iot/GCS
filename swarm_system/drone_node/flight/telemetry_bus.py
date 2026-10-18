@@ -1,7 +1,7 @@
 """
 agents/telemetry_bus.py
 -----------------------
-Async pub/sub telemetry event bus for the drone_brain swarm system.
+Async pub/sub telemetry event bus for this swarm system.
 
 Every ``DroneAgent`` publishes ``TelemetryEvent`` objects onto the
 ``TelemetryBus`` at a configurable interval.  Any number of consumers
