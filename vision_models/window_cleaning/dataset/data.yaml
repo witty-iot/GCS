@@ -1,0 +1,12 @@
+train: /Users/devaanshmakhijani/Desktop/GCS_jetson/GCS/vision_models/window_cleaning/dataset/train/images
+val: /Users/devaanshmakhijani/Desktop/GCS_jetson/GCS/vision_models/window_cleaning/dataset/valid/images
+
+nc: 4
+names: ['dirt', 'glare', 'stain', 'wet_glass']
+
+roboflow:
+  workspace: dirty-window
+  project: window-check
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/dirty-window/window-check/dataset/3
