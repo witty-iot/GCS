@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  window_clean_test_mission.xml (v2.1 schema)
+
+  Minimal out-and-back mission for testing the window_clean vision action
+  in isolation — no spray waypoints, nothing else to wait through. Fly a
+  short leg out, inspect (window_clean), fly back, land.
+-->
+<Mission id="WINDOW-CLEAN-TEST-001" name="Window Clean Test" version="2.1">
+
+  <Schedule>
+    <StartDate>2026-10-21T06:00:00</StartDate>
+    <TimeZone>Asia/Kolkata</TimeZone>
+  </Schedule>
+
+  <Fleet>
+    <Drone id="jetson-01" name="Solo">
+      <TakeoffAltitude>10</TakeoffAltitude>
+      <DefaultSpeed>5</DefaultSpeed>
+
+      <Waypoints>
+        <Waypoint id="1">
+          <Lat>28.6141</Lat><Lon>77.2091</Lon><Alt>10</Alt>
+          <Actions>
+            <Action code="window_clean"/>
+          </Actions>
+          <Description>Window inspection via vision model</Description>
+        </Waypoint>
+
+        <Waypoint id="2">
+          <Lat>28.6139</Lat><Lon>77.2090</Lon><Alt>10</Alt>
+          <Description>Return leg</Description>
+        </Waypoint>
+      </Waypoints>
+    </Drone>
+  </Fleet>
+
+  <Safety>
+    <MinBatteryPercent>20</MinBatteryPercent>
+    <MaxHdop>2.0</MaxHdop>
+    <HeartbeatTimeoutSec>5</HeartbeatTimeoutSec>
+    <GeofenceRadiusM>500</GeofenceRadiusM>
+  </Safety>
+
+  <RtlAfterMission>true</RtlAfterMission>
+</Mission>

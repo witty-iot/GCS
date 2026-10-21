@@ -24,3 +24,7 @@ hardware:
     gpio_pin: 18
     pump_on_delay_ms: 200
     pump_off_delay_ms: 300
+  camera:
+    # 0 = this laptop's built-in webcam, standing in for a real drone
+    # camera during SITL/dev testing (see flight/camera_feed.py).
+    source: 0

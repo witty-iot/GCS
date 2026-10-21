@@ -7,3 +7,7 @@ apscheduler>=3.10.0
 pytz>=2024.1
 paho-mqtt>=1.6.1,<2.0.0
 PyYAML>=6.0
+
+# window_clean action plugin — vision-based dirt/stain detection
+opencv-python>=4.9.0
+ultralytics>=8.3.0

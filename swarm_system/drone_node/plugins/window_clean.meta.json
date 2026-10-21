@@ -1,0 +1,11 @@
+{
+  "model_path": "../../vision_models/window_cleaning/runs/window_clean_v12/weights/best.pt",
+  "confidence_threshold": 0.4,
+  "trigger_classes": ["dirt", "stain"],
+  "pressure_levels": {
+    "light":  { "max_detections": 2,   "pressure": 30 },
+    "medium": { "max_detections": 5,   "pressure": 60 },
+    "heavy":  { "max_detections": 999, "pressure": 100 }
+  },
+  "hold_duration_sec": 20
+}

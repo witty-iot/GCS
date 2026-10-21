@@ -339,6 +339,10 @@ class DroneAgent:
                 self._publish_telemetry_loop(), name=f"telemetry_{self.config.id}",
             )
 
+            camera = self._extra_context.get("camera")
+            if camera is not None:
+                camera.start(self.config.id)
+
             await self.preflight()
             await self.arm_and_takeoff()
 
@@ -387,4 +391,7 @@ class DroneAgent:
                     await self._telemetry_task
                 except asyncio.CancelledError:
                     pass
+            camera = self._extra_context.get("camera")
+            if camera is not None:
+                camera.stop()
             log.info("[%s] Mission cleanup complete.", self.config.id)

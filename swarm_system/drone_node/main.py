@@ -39,6 +39,7 @@ from core.action_runner import ActionRunner
 from core.mission_parser import MissionParser, MissionParseError
 from core.mission_plan import DroneConfig, MissionPlan
 from core.scheduler import MissionScheduler
+from flight.camera_feed import CameraFeed
 from flight.drone_agent import DroneAgent
 from flight.safety import SprayController
 from flight.telemetry_bus import TelemetryBus
@@ -191,6 +192,11 @@ def _build_extra_context(cfg: dict) -> Dict[str, Any]:
             pump_off_delay_ms=spray_cfg["pump_off_delay_ms"],
         )
         log.info("Local hardware: spray controller configured on GPIO %d.", spray_cfg["gpio_pin"])
+
+    camera_cfg = hardware.get("camera")
+    if camera_cfg:
+        extra["camera"] = CameraFeed(source=camera_cfg.get("source", 0))
+        log.info("Local hardware: camera feed configured on source %s.", camera_cfg.get("source", 0))
 
     return extra
 

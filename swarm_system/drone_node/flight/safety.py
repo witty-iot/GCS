@@ -60,12 +60,19 @@ class SprayController:
                 exc,
             )
 
-    def spray_on(self) -> None:
+    def spray_on(self, pressure: int = 100) -> None:
+        """
+        Turn the pump on. ``pressure`` (0-100) is accepted for callers
+        that derive a spray intensity from something upstream (e.g. the
+        window_clean vision action) — logged either way, but only
+        actually varies the hardware output once the pump is wired to a
+        PWM-capable channel instead of today's plain digital on/off pin.
+        """
         if self._gpio is not None:
             self._gpio.output(self.gpio_pin, self._gpio.HIGH)
-            log.info("Pump ON (GPIO %d).", self.gpio_pin)
+            log.info("Pump ON (GPIO %d) pressure=%d%%.", self.gpio_pin, pressure)
         else:
-            log.info("Pump ON (GPIO %d) [SIMULATED].", self.gpio_pin)
+            log.info("Pump ON (GPIO %d) pressure=%d%% [SIMULATED].", self.gpio_pin, pressure)
 
     def emergency_stop(self) -> None:
         """

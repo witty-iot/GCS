@@ -77,6 +77,39 @@ Single-drone operation requires none of this infrastructure.
   local-only config in each Jetson's `drone_config.yaml` under
   `hardware:`.
 
+### Vision action — window cleaning
+
+`window_clean` follows the exact same plugin + meta.json pattern as
+spraying, with one addition: a persistent camera feed.
+
+- **`flight/camera_feed.py` (`CameraFeed`)** is local hardware, built
+  from `drone_config.yaml`'s `hardware.camera` section — same category
+  as `SprayController`, never mission data. It's started once, right
+  after the drone connects, and runs for the *entire* flight: a live
+  preview window is visible from shortly after takeoff until landing,
+  not just while `window_clean` is executing.
+- **The `window_clean` plugin doesn't own the camera.** It calls
+  `camera.enable_detection(...)` when its waypoint is reached, which
+  switches the already-running feed into "draw detection boxes +
+  accumulate counts" mode for that action's configured hold duration,
+  then reads back what was seen via `camera.disable_detection()`.
+- **Decision logic:** the trained YOLOv8 model (dirt/glare/stain/wet_glass,
+  see `vision_models/window_cleaning/`) runs on every frame while
+  detection mode is on. If `dirt`/`stain` detections clear the configured
+  confidence threshold, the action triggers `SprayController.spray_on()`
+  at a pressure tier (light/medium/heavy) derived from how many
+  qualifying detections were seen — not a flat on/off.
+- **Everything tunable lives in `plugins/window_clean.meta.json`**
+  (model path, confidence threshold, which classes trigger spraying,
+  pressure tiers, hold duration) — nothing hardcoded in the plugin,
+  nothing in the mission XML.
+- **No drone camera hardware exists yet.** `hardware.camera.source` is
+  whatever OpenCV `VideoCapture` index is available — `0` (a laptop's
+  built-in webcam) stands in for a real drone camera during SITL/dev
+  testing, exactly the way the SITL container stands in for a real
+  Pixhawk. Swapping to real camera hardware later is a one-line config
+  change, not a code change.
+
 ### Scheduling — ground-authoritative, with a local fallback
 
 `fleet_manager` is the scheduling authority: it parses the shared
@@ -134,19 +167,28 @@ swarm_system/
 │   │   │                                  run its actions -> RTL/land.
 │   │   ├── safety.py                     SafetyWatchdog (battery/geofence) + SprayController
 │   │   │                                  (real Jetson.GPIO, or a logged simulation).
+│   │   ├── camera_feed.py                CameraFeed: persistent live camera/preview, started
+│   │   │                                  at takeoff, toggled into detection mode by window_clean.
 │   │   └── telemetry_bus.py              In-process async pub/sub (local only — NOT MQTT).
 │   ├── swarm/                             The ONLY code that talks MQTT.
 │   │   ├── mqtt_link.py                  SwarmLink: registration, telemetry, launch signal.
 │   │   └── swarm_state.py                In-memory view of every other drone's telemetry.
 │   ├── plugins/
 │   │   ├── spray_on.py / spray_off.py / spray_pattern.py / take_photo.py
+│   │   ├── window_clean.py                Vision-based window dirt/stain detection + graded spray.
 │   │   └── *.meta.json                    Per-action parameters, sidecar to each plugin.
 │   └── requirements.txt
 │
 └── missions/
     ├── mission_schema.xsd
-    └── standalone_mission.xml             Fallback mission for offline / single-drone testing.
+    ├── standalone_mission.xml             Fallback mission for offline / single-drone testing.
+    └── window_clean_test_mission.xml      Short out-and-back mission for testing window_clean alone.
 ```
+
+The trained vision model itself lives outside `swarm_system/`, in a
+sibling `vision_models/window_cleaning/` folder (dataset, training runs,
+weights, evaluation reports) — not mission/flight code, so it's kept
+separate.
 
 ### End to end
 
@@ -206,6 +248,10 @@ swarm_system/
 - `mavsdk` v4 is a breaking API change (replaced the old `System()` gRPC
   API with a different native binding) — `requirements.txt` pins
   `mavsdk<4.0.0`.
+- The moisture-based spray controller (detecting *where* to spray based
+  on ground moisture) is a hardware gap, not a software one — a regular
+  camera only sees color/light, not moisture content. Needs an IR/thermal
+  sensor before any vision model work on it is meaningful; not started.
 
 ## Setup — Mac
 
@@ -326,7 +372,35 @@ one map.
 3. Run the mission as in step 3b. You'll see both drone icons move along
    the real waypoints, climb to altitude, and RTL home.
 
-### 5. Adding a new drone to the swarm
+### 5. Testing the window_clean vision action
+
+A short, dedicated mission for testing the vision-based window cleaning
+action on its own — no spray waypoints to wait through first. Needs a
+trained model already sitting at
+`vision_models/window_cleaning/runs/window_clean_v12/weights/best.pt`
+(see `vision_models/window_cleaning/README.md` for training it) and your
+laptop's webcam.
+
+1. **Grant camera permission** to your terminal app first — System
+   Settings → Privacy & Security → Camera → enable it. Without this the
+   feed fails to open; the action logs a warning and skips rather than
+   crashing the mission.
+2. Start a single SITL instance (step 1 above, just `sitl1`).
+3. Install the extra vision deps (already in `requirements.txt`:
+   `opencv-python`, `ultralytics`).
+4. Run:
+   ```bash
+   cd swarm_system/drone_node
+   python main.py --config config/drone_config_1.yaml \
+     --mission ../missions/window_clean_test_mission.xml --run-now
+   ```
+5. A live camera preview window pops up shortly after takeoff and stays
+   up for the whole flight. Detection boxes only appear while the drone
+   is at the mission's one waypoint (20s window) — point the laptop at a
+   window during that time. If a spray trigger fires, it's logged
+   (simulated — no real pump wired up yet).
+
+### 6. Adding a new drone to the swarm
 
 1. Flash/boot its Jetson, copy the `drone_node/` folder onto it.
 2. Set a unique `hardware_id` in its `drone_config.yaml`, point `broker.host`

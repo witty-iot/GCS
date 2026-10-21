@@ -54,6 +54,15 @@
           </Actions>
           <Description>Spray off at field exit</Description>
         </Waypoint>
+
+        <Waypoint id="4">
+          <Lat>28.6152</Lat><Lon>77.2103</Lon><Alt>10</Alt>
+          <Actions>
+            <Action code="window_clean"/>
+          </Actions>
+          <LoiterSec>20</LoiterSec>
+          <Description>Window inspection via vision model (params from plugins/window_clean.meta.json)</Description>
+        </Waypoint>
       </Waypoints>
     </Drone>
   </Fleet>
